@@ -14,6 +14,21 @@ import re
 
 
 # ==============================================================================
+# EXPORT MODULE
+# ==============================================================================
+__all__ = [
+    "GEO_PILLARS",
+    "calculate_geo_score",
+    "analyze_citation_gaps",
+    "get_prioritized_recommendations",
+    "analyze_inputs_to_indicators",
+    "analyze_revenue_impact_and_weaknesses",
+    "normalize_answers",
+    "live_crawl_website"
+]
+
+
+# ==============================================================================
 # DEFINISI 3 PILAR GEO RIIL (BOBOT TOTAL 100%)
 # ==============================================================================
 GEO_PILLARS = {

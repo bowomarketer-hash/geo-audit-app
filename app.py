@@ -9,45 +9,210 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
 
-# Import modul internal
-from geo_engine import (
-    GEO_PILLARS,
-    calculate_geo_score,
-    analyze_citation_gaps,
-    get_prioritized_recommendations,
-    analyze_inputs_to_indicators,
-    analyze_revenue_impact_and_weaknesses,
-    normalize_answers,
-    live_crawl_website
-)
-from autofix_generators import (
-    generate_organization_schema,
-    generate_faq_schema,
-    generate_product_schema,
-    generate_bluf_draft,
-    generate_robots_txt,
-    generate_conversational_faqs,
-    generate_llms_txt,
-    generate_open_graph_meta
-)
-from ai_testing_engine import (
-    AI_ENGINES,
-    CITATION_CATEGORIES,
-    get_default_competitors_by_category,
-    build_benchmark_queries,
-    detect_brand_mentions,
-    detect_brand_mentions_strict,
-    run_5x_sampling_audit,
-    generate_5x_simulated_rag_responses,
-    fetch_live_ai_completion_5x,
-    extract_and_categorize_citations,
-    analyze_citation_gap_matrix,
-    generate_simulated_ai_response,
-    run_full_simulation_benchmark,
-    fetch_live_ai_completion,
-    export_audit_to_json,
-    export_audit_to_csv
-)
+# Import modul internal dengan safe fallback untuk kelancaran deployment Streamlit Cloud
+try:
+    from geo_engine import (
+        GEO_PILLARS,
+        calculate_geo_score,
+        analyze_citation_gaps,
+        get_prioritized_recommendations,
+        analyze_inputs_to_indicators,
+        analyze_revenue_impact_and_weaknesses,
+        normalize_answers,
+        live_crawl_website
+    )
+except (ImportError, AttributeError):
+    import geo_engine
+    GEO_PILLARS = getattr(geo_engine, "GEO_PILLARS", {})
+    calculate_geo_score = getattr(geo_engine, "calculate_geo_score", None)
+    analyze_citation_gaps = getattr(geo_engine, "analyze_citation_gaps", lambda a: [])
+    get_prioritized_recommendations = getattr(geo_engine, "get_prioritized_recommendations", lambda a: {"quick_wins": [], "strategic": []})
+    analyze_inputs_to_indicators = getattr(geo_engine, "analyze_inputs_to_indicators", None)
+    live_crawl_website = getattr(geo_engine, "live_crawl_website", None)
+    normalize_answers = getattr(geo_engine, "normalize_answers", lambda ans: ans)
+
+    def analyze_revenue_impact_and_weaknesses(
+        brand_name: str,
+        category: str,
+        product_name: str,
+        location: str,
+        answers: dict,
+        sampling_audit: dict = None,
+        competitors: list = None
+    ):
+        b_name = brand_name.strip() or "Merek Anda"
+        cat = category.strip() or "Produk & Layanan"
+        prod = product_name.strip() or f"Produk Unggulan {b_name}"
+        loc = location.strip() or "Indonesia"
+        comps = competitors or ["Kompetitor Utama"]
+        main_comp = comps[0] if comps else "Kompetitor Pasar"
+        norm_answers = normalize_answers(answers)
+        specific_weaknesses = []
+
+        if not norm_answers.get("schema_org", False):
+            specific_weaknesses.append({
+                "code": "missing_schema",
+                "category": "Data Terstruktur",
+                "title": "Ketiadaan Schema.org JSON-LD (Product & LocalBusiness)",
+                "impact": "Kritis",
+                "impact_color": "#EF4444",
+                "explanation": f"AI tidak dapat membaca entitas bisnis atau harga secara terstruktur. AI memilih merujuk katalog {main_comp}.",
+                "solution": "Salin kode Schema Product & LocalBusiness dari tab Auto-Fix Generator ke tag <head> web Anda."
+            })
+        if not norm_answers.get("tech_robots_llmstxt", False):
+            specific_weaknesses.append({
+                "code": "missing_llmstxt",
+                "category": "Aksesibilitas Mesin",
+                "title": "Ketiadaan Berkas llms.txt & Potensi Pemblokiran Bot AI",
+                "impact": "Tinggi",
+                "impact_color": "#F59E0B",
+                "explanation": "Crawler AI (GPTBot, ClaudeBot, PerplexityBot) tidak memiliki dokumen ringkasan machine-readable resmi.",
+                "solution": "Unggah berkas /llms.txt standar di root domain dan pastikan robots.txt mengizinkan bot AI."
+            })
+        if not norm_answers.get("content_metadata_og", False):
+            specific_weaknesses.append({
+                "code": "missing_bluf_og",
+                "category": "Struktur Konten",
+                "title": "Format Proposisi Nilai Belum Menerapkan BLUF",
+                "impact": "Tinggi",
+                "impact_color": "#EF4444",
+                "explanation": "Proposisi nilai terkubur di bagian tengah halaman web.",
+                "solution": "Letakkan ringkasan 50 kata pertama (BLUF) berisi nama merek, keunggulan, dan harga di bagian paling atas."
+            })
+        if not norm_answers.get("citation_multi_source", False):
+            specific_weaknesses.append({
+                "code": "low_grounding",
+                "category": "Otoritas & Grounding",
+                "title": "Minimnya Jejak Konsensus Pihak Ketiga (Off-Page Grounding)",
+                "impact": "Sedang",
+                "impact_color": "#F59E0B",
+                "explanation": f"AI melakukan validasi silang data di internet. Merek {b_name} membutuhkan konsensus ulasan di {loc}.",
+                "solution": f"Lengkapi Google Business Profile di {loc} dan minta 15+ ulasan autentik."
+            })
+
+        prob_score = sampling_audit.get("probability_score", 0.0) if sampling_audit else (
+            80.0 if norm_answers.get("ai_high_intent_visibility") else 20.0
+        )
+        high_intent_mentioned = prob_score >= 60.0
+        exploratory_mentioned = prob_score >= 40.0
+
+        return {
+            "brand_name": b_name,
+            "category": cat,
+            "main_competitor": main_comp,
+            "specific_weaknesses": specific_weaknesses,
+            "intent_breakdown": {
+                "high_intent": {
+                    "type": "Non-Branded High-Intent (Siap Beli)",
+                    "query_example": f"Rekomendasikan {cat} terbaik asli dari {loc} yang berkualitas tinggi dan siap dipesan sekarang.",
+                    "intent_description": "Calon pembeli berdaya beli aktif yang berada di tahap akhir pertimbangan transaksi.",
+                    "is_mentioned": high_intent_mentioned,
+                    "status_label": "🟢 Direkomendasikan AI (Terkonversi)" if high_intent_mentioned else "🔴 Diabaikan AI (Peluang Lepas)",
+                    "has_lost_revenue": not high_intent_mentioned,
+                    "alert_title": "⚠️ POTENTIAL LOST REVENUE ALERT" if not high_intent_mentioned else "✅ Revenue Opportunity Secured",
+                    "alert_description": (
+                        f"Calon pembeli siap beli yang menanyakan {cat} di {loc} dialihkan AI ke kompetitor ({main_comp}). "
+                        f"Terjadi potensi kebocoran transaksi langsung bagi {b_name}!"
+                        if not high_intent_mentioned else
+                        f"Merek {b_name} berhasil masuk dalam daftar rekomendasi transaksi AI pada kueri komersial tinggi."
+                    )
+                },
+                "exploratory": {
+                    "type": "Exploratory & Problem-Solving (Pencarian Solusi)",
+                    "query_example": f"Apa solusi {cat} yang paling efisien, berkualitas, dan terpercaya untuk kebutuhan jangka panjang?",
+                    "intent_description": "Pengguna yang membandingkan alternatif solusi di puncak funnel (top-of-funnel).",
+                    "is_mentioned": exploratory_mentioned,
+                    "status_label": "🟢 Muncul dalam Komparasi" if exploratory_mentioned else "🔴 Belum Masuk Komparasi",
+                    "has_lost_revenue": False
+                }
+            },
+            "priority_action_steps": [
+                {
+                    "priority": "1. Quick Win",
+                    "timeframe": "< 1 Hari",
+                    "badge_color": "#10B981",
+                    "title": "Salin Schema JSON-LD & Terapkan Format BLUF",
+                    "description": "Salin kode Schema LocalBusiness dan Product serta draf BLUF ke halaman website Anda.",
+                    "expected_impact": "Mencegah kesalahan halusinasi harga dan membuat AI membaca entitas bisnis secara instan."
+                },
+                {
+                    "priority": "2. Medium-Term",
+                    "timeframe": "1 - 2 Minggu",
+                    "badge_color": "#3B82F6",
+                    "title": "Terbitkan Berkas /llms.txt & Conversational FAQ",
+                    "description": f"Buat berkas /llms.txt di root domain dan tambahkan FAQ percakapan {prod}.",
+                    "expected_impact": "Meningkatkan vector similarity saat pengguna bertanya dalam bahasa alami."
+                },
+                {
+                    "priority": "3. Strategic / Digital PR",
+                    "timeframe": "2 - 4 Minggu",
+                    "badge_color": "#8B5CF6",
+                    "title": "Bangun Grounding Konsensus Eksternal & GBP",
+                    "description": f"Verifikasi Google Business Profile di {loc} dan dapatkan ulasan autentik.",
+                    "expected_impact": "Memperkuat skor grounding multi-sumber sehingga AI merekomendasikan brand Anda di atas kompetitor."
+                }
+            ]
+        }
+
+try:
+    from autofix_generators import (
+        generate_organization_schema,
+        generate_faq_schema,
+        generate_product_schema,
+        generate_bluf_draft,
+        generate_robots_txt,
+        generate_conversational_faqs,
+        generate_llms_txt,
+        generate_open_graph_meta
+    )
+except (ImportError, AttributeError):
+    import autofix_generators
+    generate_organization_schema = getattr(autofix_generators, "generate_organization_schema", None)
+    generate_faq_schema = getattr(autofix_generators, "generate_faq_schema", None)
+    generate_product_schema = getattr(autofix_generators, "generate_product_schema", None)
+    generate_bluf_draft = getattr(autofix_generators, "generate_bluf_draft", None)
+    generate_robots_txt = getattr(autofix_generators, "generate_robots_txt", None)
+    generate_conversational_faqs = getattr(autofix_generators, "generate_conversational_faqs", None)
+    generate_llms_txt = getattr(autofix_generators, "generate_llms_txt", lambda *args, **kwargs: "# llms.txt")
+    generate_open_graph_meta = getattr(autofix_generators, "generate_open_graph_meta", lambda *args, **kwargs: "<!-- Open Graph -->")
+
+try:
+    from ai_testing_engine import (
+        AI_ENGINES,
+        CITATION_CATEGORIES,
+        get_default_competitors_by_category,
+        build_benchmark_queries,
+        detect_brand_mentions,
+        detect_brand_mentions_strict,
+        run_5x_sampling_audit,
+        generate_5x_simulated_rag_responses,
+        fetch_live_ai_completion_5x,
+        extract_and_categorize_citations,
+        analyze_citation_gap_matrix,
+        generate_simulated_ai_response,
+        run_full_simulation_benchmark,
+        fetch_live_ai_completion,
+        export_audit_to_json,
+        export_audit_to_csv
+    )
+except (ImportError, AttributeError):
+    import ai_testing_engine
+    AI_ENGINES = getattr(ai_testing_engine, "AI_ENGINES", {})
+    CITATION_CATEGORIES = getattr(ai_testing_engine, "CITATION_CATEGORIES", {})
+    get_default_competitors_by_category = getattr(ai_testing_engine, "get_default_competitors_by_category", lambda cat, loc: ["Kompetitor A", "Kompetitor B"])
+    build_benchmark_queries = getattr(ai_testing_engine, "build_benchmark_queries", None)
+    detect_brand_mentions = getattr(ai_testing_engine, "detect_brand_mentions", None)
+    detect_brand_mentions_strict = getattr(ai_testing_engine, "detect_brand_mentions_strict", None)
+    run_5x_sampling_audit = getattr(ai_testing_engine, "run_5x_sampling_audit", None)
+    generate_5x_simulated_rag_responses = getattr(ai_testing_engine, "generate_5x_simulated_rag_responses", None)
+    fetch_live_ai_completion_5x = getattr(ai_testing_engine, "fetch_live_ai_completion_5x", None)
+    extract_and_categorize_citations = getattr(ai_testing_engine, "extract_and_categorize_citations", None)
+    analyze_citation_gap_matrix = getattr(ai_testing_engine, "analyze_citation_gap_matrix", None)
+    generate_simulated_ai_response = getattr(ai_testing_engine, "generate_simulated_ai_response", None)
+    run_full_simulation_benchmark = getattr(ai_testing_engine, "run_full_simulation_benchmark", None)
+    fetch_live_ai_completion = getattr(ai_testing_engine, "fetch_live_ai_completion", None)
+    export_audit_to_json = getattr(ai_testing_engine, "export_audit_to_json", None)
+    export_audit_to_csv = getattr(ai_testing_engine, "export_audit_to_csv", None)
 
 # Konfigurasi Halaman Streamlit
 st.set_page_config(
