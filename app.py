@@ -24,7 +24,43 @@ try:
 except (ImportError, AttributeError):
     import geo_engine
     GEO_PILLARS = getattr(geo_engine, "GEO_PILLARS", {})
-    calculate_geo_score = getattr(geo_engine, "calculate_geo_score", None)
+    _calc_geo_orig = getattr(geo_engine, "calculate_geo_score", None)
+    def calculate_geo_score(current_answers=None, sampling_data=None, answers=None, *args, **kwargs):
+        ans = current_answers if current_answers is not None else answers
+        if ans is None and args:
+            ans = args[0]
+        if ans is None:
+            ans = kwargs.get("current_answers", kwargs.get("answers", {}))
+        if not isinstance(ans, dict):
+            ans = {}
+        if _calc_geo_orig is not None:
+            try:
+                return _calc_geo_orig(current_answers=ans, sampling_data=sampling_data)
+            except TypeError:
+                try:
+                    return _calc_geo_orig(ans, sampling_data=sampling_data)
+                except TypeError:
+                    try:
+                        return _calc_geo_orig(ans)
+                    except TypeError:
+                        pass
+        p1 = 30.0 if ans.get("schema_org", False) or ans.get("tech_robots_llmstxt", False) else 0.0
+        p2 = float(sampling_data.get("probability_score", 0.0)) * 0.4 if (sampling_data and "probability_score" in sampling_data) else (20.0 if ans.get("brand_identity", False) else 0.0)
+        p3 = 30.0 if ans.get("citation_official_domain", False) else 0.0
+        tot = round(min(p1 + p2 + p3, 100.0), 1)
+        return {
+            "total_score": tot,
+            "tier_key": "ai_ready" if tot >= 80 else ("needs_optimization" if tot >= 50 else "invisible"),
+            "tier_name": "AI-Ready (Sangat Siap)" if tot >= 80 else ("Needs Optimization (Cukup Siap)" if tot >= 50 else "Invisible to AI (Belum Siap)"),
+            "tier_color": "#10B981" if tot >= 80 else ("#F59E0B" if tot >= 50 else "#EF4444"),
+            "tier_badge": "🟢" if tot >= 80 else ("🟡" if tot >= 50 else "🔴"),
+            "tier_description": f"Skor GEO saat ini: {tot}/100.",
+            "pillar_results": {
+                "pilar_1": {"title": "Crawlability & Machine-Readability", "icon": "🤖", "weight": 0.3, "weight_pct": 30, "checked_count": 1 if p1 > 0 else 0, "total_count": 2, "percentage": round(p1 / 0.3, 1), "earned_score": p1, "max_score": 30.0},
+                "pilar_2": {"title": "Share of Model / AI Visibility", "icon": "🔍", "weight": 0.4, "weight_pct": 40, "checked_count": 1 if p2 > 0 else 0, "total_count": 2, "percentage": round(p2 / 0.4, 1), "earned_score": p2, "max_score": 40.0},
+                "pilar_3": {"title": "Grounding & Citations", "icon": "🌐", "weight": 0.3, "weight_pct": 30, "checked_count": 1 if p3 > 0 else 0, "total_count": 2, "percentage": round(p3 / 0.3, 1), "earned_score": p3, "max_score": 30.0}
+            }
+        }
     analyze_citation_gaps = getattr(geo_engine, "analyze_citation_gaps", lambda a: [])
     get_prioritized_recommendations = getattr(geo_engine, "get_prioritized_recommendations", lambda a: {"quick_wins": [], "strategic": []})
     analyze_inputs_to_indicators = getattr(geo_engine, "analyze_inputs_to_indicators", None)
@@ -690,7 +726,53 @@ for p_val in GEO_PILLARS.values():
             current_answers[ind["id"]] = st.session_state[ind["id"]]
 
 sampling_audit_state = st.session_state.get("ai_test_5x_audit")
-score_data = calculate_geo_score(current_answers, sampling_data=sampling_audit_state)
+try:
+    score_data = calculate_geo_score(current_answers=current_answers, sampling_data=sampling_audit_state)
+except TypeError:
+    try:
+        score_data = calculate_geo_score(current_answers, sampling_data=sampling_audit_state)
+    except TypeError:
+        try:
+            score_data = calculate_geo_score(current_answers)
+        except TypeError:
+            score_data = calculate_geo_score(answers=current_answers)
+
+if not isinstance(score_data, dict):
+    score_data = {}
+
+total_score = float(score_data.get("total_score", 0.0))
+tier_badge = str(score_data.get("tier_badge", "🔴"))
+tier_name = str(score_data.get("tier_name", "Invisible to AI (Belum Siap)"))
+tier_color = str(score_data.get("tier_color", "#EF4444"))
+tier_description = str(score_data.get("tier_description", "Audit GEO menunjukkan perlunya perbaikan fondasi visibilitas AI."))
+pillar_results = score_data.get("pillar_results")
+if not isinstance(pillar_results, dict):
+    pillar_results = {}
+
+for p_key, default_title, default_weight in [
+    ("pilar_1", "Crawlability & Machine-Readability", 0.30),
+    ("pilar_2", "Share of Model / AI Visibility", 0.40),
+    ("pilar_3", "Grounding & Citations", 0.30)
+]:
+    if p_key not in pillar_results:
+        pillar_results[p_key] = {
+            "title": default_title,
+            "icon": "🤖" if p_key == "pilar_1" else ("🔍" if p_key == "pilar_2" else "🌐"),
+            "weight": default_weight,
+            "weight_pct": int(default_weight * 100),
+            "checked_count": 0,
+            "total_count": 2,
+            "percentage": 0.0,
+            "earned_score": 0.0,
+            "max_score": round(default_weight * 100, 1)
+        }
+score_data["total_score"] = total_score
+score_data["tier_badge"] = tier_badge
+score_data["tier_name"] = tier_name
+score_data["tier_color"] = tier_color
+score_data["tier_description"] = tier_description
+score_data["pillar_results"] = pillar_results
+
 citation_gaps = analyze_citation_gaps(current_answers)
 recom_data = get_prioritized_recommendations(current_answers)
 
@@ -708,13 +790,6 @@ revenue_analysis = analyze_revenue_impact_and_weaknesses(
     sampling_audit=sampling_audit_state,
     competitors=active_comps
 )
-
-total_score = score_data["total_score"]
-tier_badge = score_data["tier_badge"]
-tier_name = score_data["tier_name"]
-tier_color = score_data["tier_color"]
-tier_description = score_data["tier_description"]
-pillar_results = score_data["pillar_results"]
 
 
 # ==============================================================================

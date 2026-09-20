@@ -142,9 +142,12 @@ def normalize_answers(answers: Dict[str, bool]) -> Dict[str, bool]:
 
 
 def calculate_geo_score(
-    answers: Dict[str, bool],
+    current_answers: Optional[Dict[str, bool]] = None,
     sampling_data: Optional[Dict[str, Any]] = None,
-    citation_data: Optional[Dict[str, Any]] = None
+    answers: Optional[Dict[str, bool]] = None,
+    citation_data: Optional[Dict[str, Any]] = None,
+    *args,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     Menghitung skor total GEO (skala 0-100 transparan) berbasis 3 Pilar:
@@ -152,10 +155,26 @@ def calculate_geo_score(
     - Pilar 2: Share of Model / AI Visibility (40 Poin)
     - Pilar 3: Grounding & Citations (30 Poin)
     
-    Jika data sampling AI (sampling_data) tersedia, skor Pilar 2 akan dihitung
-    secara real-time berdasarkan Citation Probability Score (5-Time Sampling).
+    Menerima parameter:
+    - current_answers / answers (dict): checklist audit indikator GEO
+    - sampling_data / sampling_audit (dict, opsional): data hasil pengujian 5-Time Sampling AI
+    - citation_data (dict, opsional)
+    - *args, **kwargs: fleksibilitas pemanggilan posisi & kata kunci
     """
-    norm_answers = normalize_answers(answers)
+    # Resolusi parameter jawaban fleksibel (current_answers, answers, args, kwargs)
+    raw_answers = current_answers if current_answers is not None else answers
+    if raw_answers is None and args:
+        raw_answers = args[0]
+    if raw_answers is None:
+        raw_answers = kwargs.get("current_answers", kwargs.get("answers", {}))
+    if not isinstance(raw_answers, dict):
+        raw_answers = {}
+
+    # Resolusi sampling_data
+    if sampling_data is None:
+        sampling_data = kwargs.get("sampling_data") or kwargs.get("sampling_audit_state") or kwargs.get("sampling_audit")
+
+    norm_answers = normalize_answers(raw_answers)
     pillar_results = {}
     total_score = 0.0
 
