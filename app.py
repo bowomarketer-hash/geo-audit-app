@@ -16,6 +16,8 @@ from geo_engine import (
     analyze_citation_gaps,
     get_prioritized_recommendations,
     analyze_inputs_to_indicators,
+    analyze_revenue_impact_and_weaknesses,
+    normalize_answers,
     live_crawl_website
 )
 from autofix_generators import (
@@ -24,11 +26,14 @@ from autofix_generators import (
     generate_product_schema,
     generate_bluf_draft,
     generate_robots_txt,
-    generate_conversational_faqs
+    generate_conversational_faqs,
+    generate_llms_txt,
+    generate_open_graph_meta
 )
 from ai_testing_engine import (
     AI_ENGINES,
     CITATION_CATEGORIES,
+    get_default_competitors_by_category,
     build_benchmark_queries,
     detect_brand_mentions,
     detect_brand_mentions_strict,
@@ -255,37 +260,47 @@ st.markdown("""
 
 
 # ==============================================================================
-# INISIALISASI SESSION STATE
+# INISIALISASI SESSION STATE (BERSIH / TANPA DUMMY PRESET SAAT AWAL)
 # ==============================================================================
 if "brand_name" not in st.session_state:
-    st.session_state["brand_name"] = "Kopi Arabika Toraja Baji"
+    st.session_state["brand_name"] = ""
 if "website_url" not in st.session_state:
-    st.session_state["website_url"] = "https://kopitorajabaji.id"
+    st.session_state["website_url"] = ""
 if "business_category" not in st.session_state:
-    st.session_state["business_category"] = "Kuliner & Minuman"
+    st.session_state["business_category"] = "Pertanian & Agribisnis"
 if "phone_number" not in st.session_state:
-    st.session_state["phone_number"] = "+62 812-9876-5432"
+    st.session_state["phone_number"] = ""
 if "location_info" not in st.session_state:
-    st.session_state["location_info"] = "Makale, Tana Toraja, Sulawesi Selatan"
+    st.session_state["location_info"] = ""
 if "product_name" not in st.session_state:
-    st.session_state["product_name"] = "Kopi Toraja Single Origin Specialty Grade 250g"
+    st.session_state["product_name"] = ""
 if "price_range" not in st.session_state:
-    st.session_state["price_range"] = "Rp 85.000 - Rp 165.000"
+    st.session_state["price_range"] = ""
 if "key_advantages" not in st.session_state:
-    st.session_state["key_advantages"] = "100% Organik dari Petani Lokal, Sertifikat Halal & Cupping Score 84+"
+    st.session_state["key_advantages"] = ""
 
-# State untuk 10 Indikator Checklist
+# State untuk Indikator 3 Pilar GEO Riil (Default False / Bersih)
 DEFAULT_CHECKS = {
+    # Pilar 1: Crawlability & Machine-Readability (30%)
+    "schema_org": False,
+    "content_metadata_og": False,
+    "tech_robots_llmstxt": False,
+    # Pilar 2: Share of Model / AI Visibility (40%)
+    "ai_high_intent_visibility": False,
+    "ai_exploratory_visibility": False,
+    # Pilar 3: Grounding & Citations (30%)
+    "citation_official_domain": False,
+    "citation_multi_source": False,
+    # Indikator Kompatibilitas / Legacy Crawler
     "tech_robots": False,
-    "tech_https_speed": True,
+    "tech_https_speed": False,
     "content_bluf": False,
-    "content_headings": True,
+    "content_headings": False,
     "content_faq": False,
     "content_data": False,
-    "schema_org": False,
     "schema_product_faq": False,
     "offpage_youtube": False,
-    "offpage_mentions": True
+    "offpage_mentions": False,
 }
 
 for k, v in DEFAULT_CHECKS.items():
@@ -294,7 +309,7 @@ for k, v in DEFAULT_CHECKS.items():
 
 # State untuk Modul AI Testing & Audit
 if "brand_aliases" not in st.session_state:
-    st.session_state["brand_aliases"] = "kopitorajabaji.id, Kopi Toraja Baji, Toraja Baji"
+    st.session_state["brand_aliases"] = ""
 if "ai_test_mode" not in st.session_state:
     st.session_state["ai_test_mode"] = "Mode Simulasi (Demo)"
 if "ai_test_selected_engine" not in st.session_state:
@@ -308,41 +323,41 @@ if "ai_test_manual_text" not in st.session_state:
 if "ai_test_benchmark_results" not in st.session_state:
     st.session_state["ai_test_benchmark_results"] = None
 if "ai_test_competitors" not in st.session_state:
-    st.session_state["ai_test_competitors"] = "Kopi Kenangan, Otten Coffee, Anomali Coffee, Kapal Api Specialty"
+    st.session_state["ai_test_competitors"] = ""
 if "ai_test_5x_prompt" not in st.session_state:
     st.session_state["ai_test_5x_prompt"] = ""
 if "ai_test_5x_responses" not in st.session_state:
     st.session_state["ai_test_5x_responses"] = None
 if "ai_test_5x_scenario" not in st.session_state:
     st.session_state["ai_test_5x_scenario"] = "🟢 AI-Ready (4-5 dari 5 Run Ditemukan)"
+if "ai_test_5x_audit" not in st.session_state:
+    st.session_state["ai_test_5x_audit"] = None
 
 
-def set_demo_data():
-    """Mengisi data contoh UMKM kopi nusantara yang realistis."""
-    st.session_state["brand_name"] = "Kopi Arabika Toraja Baji"
-    st.session_state["website_url"] = "https://kopitorajabaji.id"
-    st.session_state["business_category"] = "Kuliner & Minuman"
-    st.session_state["phone_number"] = "+62 812-9876-5432"
-    st.session_state["location_info"] = "Makale, Tana Toraja, Sulawesi Selatan"
-    st.session_state["product_name"] = "Kopi Toraja Single Origin Specialty Grade 250g"
-    st.session_state["price_range"] = "Rp 85.000 - Rp 165.000"
-    st.session_state["key_advantages"] = "100% Organik dari Petani Lokal, Sertifikat Halal & Cupping Score 84+"
-    st.session_state["tech_robots"] = False
-    st.session_state["tech_https_speed"] = True
-    st.session_state["content_bluf"] = False
-    st.session_state["content_headings"] = True
-    st.session_state["content_faq"] = False
-    st.session_state["content_data"] = False
-    st.session_state["schema_org"] = False
-    st.session_state["schema_product_faq"] = False
-    st.session_state["offpage_youtube"] = False
-    st.session_state["offpage_mentions"] = True
-
-
-def reset_all_checks():
-    """Mengosongkan semua indikator ke False."""
+def reset_checklist_only():
+    """
+    Mengosongkan HANYA checklist indikator audit ke False.
+    TIDAK menghapus data input form (brand, url, kategori, lokasi, dll)
+    serta hasil kalkulasi skor / audit 5x yang sudah tersimpan.
+    """
     for k in DEFAULT_CHECKS.keys():
         st.session_state[k] = False
+
+    for p_val in GEO_PILLARS.values():
+        for ind in p_val["indicators"]:
+            st.session_state[ind["id"]] = False
+            widget_key = f"chk_{ind['id']}"
+            if widget_key in st.session_state:
+                st.session_state[widget_key] = False
+
+    for key in list(st.session_state.keys()):
+        if key.startswith("checklist_") or key.startswith("chk_"):
+            st.session_state[key] = False
+
+    if "last_analysis_summary" in st.session_state:
+        del st.session_state["last_analysis_summary"]
+    if "last_live_crawl" in st.session_state:
+        del st.session_state["last_live_crawl"]
 
 
 # ==============================================================================
@@ -376,51 +391,29 @@ with st.sidebar:
                 st.session_state["last_detected_tags"] = analysis_res["detected_data"]
                 st.session_state["last_analysis_reasons"] = analysis_res["reasons"]
 
-                # 2. Live Web Crawl (Server TTFB, HTTPS SSL, robots.txt untuk 4 AI Bots)
+                # 2. Live Web Crawl (Server TTFB, HTTPS SSL, robots.txt untuk 4 AI Bots & llms.txt)
                 crawl_res = live_crawl_website(target_site)
                 if crawl_res["success"]:
                     st.session_state["tech_robots"] = crawl_res["tech_robots_passed"]
                     st.session_state["tech_https_speed"] = crawl_res["tech_https_speed_passed"]
+                    st.session_state["tech_robots_llmstxt"] = crawl_res.get("tech_robots_passed", False) or crawl_res.get("llms_txt_found", False)
                     if crawl_res.get("html_inspections", {}).get("has_schema_jsonld"):
                         st.session_state["schema_org"] = True
                         st.session_state["schema_product_faq"] = True
-                    if crawl_res.get("html_inspections", {}).get("has_headings"):
+                    if crawl_res.get("html_inspections", {}).get("has_open_graph") or crawl_res.get("html_inspections", {}).get("has_headings"):
+                        st.session_state["content_metadata_og"] = True
                         st.session_state["content_headings"] = True
                     st.session_state["last_live_crawl"] = crawl_res
-                    st.toast("✅ Live Audit Web Selesai! Seluruh 10 indikator GEO telah terisi otomatis.", icon="🌐")
+                    st.toast("✅ Live Audit Web Selesai! Indikator GEO telah terisi otomatis.", icon="🌐")
                 else:
                     st.sidebar.warning(f"⚠️ Live Crawl: {crawl_res.get('error_message')}")
                     st.toast("⚠️ Evaluasi selesai dengan data inputan lokal.", icon="⚠️")
                 st.rerun()
 
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button("📋 Preset Demo", use_container_width=True, help="Muat data contoh UMKM Kopi Toraja"):
-            set_demo_data()
-            inputs_data = {
-                "brand_name": st.session_state["brand_name"],
-                "website_url": st.session_state["website_url"],
-                "business_category": st.session_state["business_category"],
-                "phone_number": st.session_state["phone_number"],
-                "location_info": st.session_state["location_info"],
-                "product_name": st.session_state["product_name"],
-                "price_range": st.session_state["price_range"],
-                "key_advantages": st.session_state["key_advantages"]
-            }
-            analysis_res = analyze_inputs_to_indicators(inputs_data)
-            for ind_k, ind_v in analysis_res["answers"].items():
-                st.session_state[ind_k] = ind_v
-            st.session_state["last_analysis_summary"] = analysis_res["summary"]
-            st.session_state["last_detected_tags"] = analysis_res["detected_data"]
-            st.rerun()
-    with col_btn2:
-        if st.button("🔄 Kosongkan Cek", use_container_width=True, help="Kosongkan semua checklist"):
-            reset_all_checks()
-            if "last_analysis_summary" in st.session_state:
-                del st.session_state["last_analysis_summary"]
-            if "last_live_crawl" in st.session_state:
-                del st.session_state["last_live_crawl"]
-            st.rerun()
+    if st.button("🔄 Kosongkan Checklist", use_container_width=True, help="Kosongkan seluruh centang checklist audit tanpa mereset profil data UMKM"):
+        reset_checklist_only()
+        st.toast("Checklist berhasil dikosongkan. Data form tetap tersimpan.", icon="🔄")
+        st.rerun()
 
     st.markdown("---")
 
@@ -523,12 +516,33 @@ if st.session_state.get("last_analysis_summary"):
 
 
 # ==============================================================================
-# LOGIKA HITUNG SKOR SECARA REAL-TIME
+# LOGIKA HITUNG SKOR SECARA REAL-TIME (3 PILAR RIIL & REVENUE IMPACT)
 # ==============================================================================
 current_answers = {k: st.session_state.get(k, False) for k in DEFAULT_CHECKS.keys()}
-score_data = calculate_geo_score(current_answers)
+for p_val in GEO_PILLARS.values():
+    for ind in p_val["indicators"]:
+        if ind["id"] in st.session_state:
+            current_answers[ind["id"]] = st.session_state[ind["id"]]
+
+sampling_audit_state = st.session_state.get("ai_test_5x_audit")
+score_data = calculate_geo_score(current_answers, sampling_data=sampling_audit_state)
 citation_gaps = analyze_citation_gaps(current_answers)
 recom_data = get_prioritized_recommendations(current_answers)
+
+# Hitung Analisis Dampak Finansial & Deteksi Celah LLM (Revenue Impact)
+active_comps = [c.strip() for c in st.session_state.get("ai_test_competitors", "").split(",") if c.strip()]
+if not active_comps:
+    active_comps = get_default_competitors_by_category(st.session_state.get("business_category", ""), st.session_state.get("location_info", ""))
+
+revenue_analysis = analyze_revenue_impact_and_weaknesses(
+    brand_name=st.session_state.get("brand_name", ""),
+    category=st.session_state.get("business_category", ""),
+    product_name=st.session_state.get("product_name", ""),
+    location=st.session_state.get("location_info", ""),
+    answers=current_answers,
+    sampling_audit=sampling_audit_state,
+    competitors=active_comps
+)
 
 total_score = score_data["total_score"]
 tier_badge = score_data["tier_badge"]
@@ -542,7 +556,7 @@ pillar_results = score_data["pillar_results"]
 # 5 TAB UTAMA INTERFACE
 # ==============================================================================
 tab_audit, tab_dashboard, tab_testing, tab_autofix, tab_guide = st.tabs([
-    "📋 1. Checklist Audit (10 Indikator)",
+    "📋 1. Checklist Audit (3 Pilar Riil)",
     "📊 2. Dasbor Skor & Kesenjangan Kutipan",
     "🤖 3. Automated AI Testing & Audit",
     "⚡ 4. Auto-Fix Generator",
@@ -551,13 +565,13 @@ tab_audit, tab_dashboard, tab_testing, tab_autofix, tab_guide = st.tabs([
 
 
 # ==============================================================================
-# TAB 1: CHECKLIST AUDIT (10 INDIKATOR DALAM 4 PILAR)
+# TAB 1: CHECKLIST AUDIT (3 PILAR GEO RIIL)
 # ==============================================================================
 with tab_audit:
-    st.markdown("### 📋 Evaluasi Kesiapan GEO (10 Indikator Kunci)")
+    st.markdown("### 📋 Evaluasi Kesiapan GEO (3 Pilar Riil)")
     st.write(
-        "Centang setiap pernyataan di bawah ini yang sudah benar-benar diterapkan pada website dan kehadiran digital merek Anda. "
-        "Skor dan analisis kesenjangan akan terhitung secara otomatis secara instan."
+        "Centang setiap indikator di bawah ini yang sudah benar-benar diterapkan pada website dan kehadiran digital merek Anda. "
+        "Skor dan analisis dampak finansial dihitung secara transparan dan instan."
     )
 
     # Indikator ringkasan skor kecil di atas
@@ -569,8 +583,9 @@ with tab_audit:
             delta=f"{tier_badge} {tier_name.split('(')[0].strip()}"
         )
     with col_stat_mini:
-        checked_total = sum(1 for v in current_answers.values() if v)
-        st.info(f"**Progres:** {checked_total} dari 10 indikator tercentang. Kategori status: **{tier_name}**")
+        p_primary_ids = ["schema_org", "content_metadata_og", "tech_robots_llmstxt", "ai_high_intent_visibility", "ai_exploratory_visibility", "citation_official_domain", "citation_multi_source"]
+        checked_total = sum(1 for ind_id in p_primary_ids if current_answers.get(ind_id, False))
+        st.info(f"**Progres:** {checked_total} dari 7 indikator utama 3 pilar terpenuhi. Kategori status: **{tier_name}**")
 
     st.markdown("---")
 
@@ -582,11 +597,11 @@ with tab_audit:
                 <div>
                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem;">
                         <span style="font-size: 1.2rem;">🌐</span>
-                        <strong style="color: #0f172a; font-size: 1.05rem;">Live Crawler Otomatis: Fetch URL & Analisis robots.txt AI</strong>
+                        <strong style="color: #0f172a; font-size: 1.05rem;">Live Crawler Otomatis: Fetch URL, robots.txt &amp; llms.txt AI</strong>
                         <span style="background: #e0f2fe; color: #0369a1; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 6px;">REAL-TIME INSPECTION</span>
                     </div>
                     <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 0; line-height: 1.5;">
-                        Pindai langsung server website Anda secara real-time: Mendeteksi apakah <code>/robots.txt</code> mengizinkan <strong>GPTBot, ClaudeBot, Google-Extended, dan PerplexityBot</strong>, memvalidasi enkripsi HTTPS, serta mengukur waktu respons (TTFB).
+                        Pindai langsung server website Anda secara real-time: Mendeteksi apakah <code>/robots.txt</code> mengizinkan <strong>GPTBot, ClaudeBot, Google-Extended, dan PerplexityBot</strong>, memeriksa keberadaan <code>/llms.txt</code>, serta memvalidasi Open Graph dan kecepatan respons (TTFB).
                     </p>
                 </div>
             </div>
@@ -595,15 +610,14 @@ with tab_audit:
 
         col_run1, col_run2 = st.columns([3, 1])
         with col_run1:
-            st.caption(f"Target URL: `{st.session_state['website_url']}` (Ubah di sidebar jika ingin menguji domain lain)")
+            st.caption(f"Target URL: `{st.session_state.get('website_url') or '(Belum diisi)'}` (Ubah di sidebar jika ingin menguji domain lain)")
         with col_run2:
             if st.button("🚀 Jalankan Live Audit Web", type="primary", use_container_width=True, key="btn_run_live_tab1"):
-                target_url = st.session_state["website_url"].strip()
+                target_url = st.session_state.get("website_url", "").strip()
                 if not target_url:
                     st.error("Silakan masukkan URL website di sidebar.")
                 else:
-                    with st.spinner(f"🔍 Menghubungi server live {target_url} dan memeriksa robots.txt..."):
-                        # 1. Analisis Heuristik Konten, Data, dan Profil Merek
+                    with st.spinner(f"🔍 Menghubungi server live {target_url} dan memindai robots.txt & llms.txt..."):
                         inputs_data = {
                             "brand_name": st.session_state["brand_name"],
                             "website_url": st.session_state["website_url"],
@@ -621,18 +635,19 @@ with tab_audit:
                         st.session_state["last_detected_tags"] = analysis_res["detected_data"]
                         st.session_state["last_analysis_reasons"] = analysis_res["reasons"]
 
-                        # 2. Live Web Crawl
                         crawl_res = live_crawl_website(target_url)
                         if crawl_res["success"]:
                             st.session_state["tech_robots"] = crawl_res["tech_robots_passed"]
                             st.session_state["tech_https_speed"] = crawl_res["tech_https_speed_passed"]
+                            st.session_state["tech_robots_llmstxt"] = crawl_res.get("tech_robots_passed", False) or crawl_res.get("llms_txt_found", False)
                             if crawl_res.get("html_inspections", {}).get("has_schema_jsonld"):
                                 st.session_state["schema_org"] = True
                                 st.session_state["schema_product_faq"] = True
-                            if crawl_res.get("html_inspections", {}).get("has_headings"):
+                            if crawl_res.get("html_inspections", {}).get("has_open_graph") or crawl_res.get("html_inspections", {}).get("has_headings"):
+                                st.session_state["content_metadata_og"] = True
                                 st.session_state["content_headings"] = True
                             st.session_state["last_live_crawl"] = crawl_res
-                            st.toast("✅ Live Audit Berhasil! Seluruh 10 indikator GEO telah terisi otomatis.", icon="🌐")
+                            st.toast("✅ Live Audit Berhasil! Indikator GEO telah terisi otomatis.", icon="🌐")
                             st.rerun()
                         else:
                             st.error(f"❌ {crawl_res.get('error_message')}")
@@ -662,18 +677,18 @@ with tab_audit:
                     </div>
                 </div>
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 0.75rem 1rem; border-radius: 10px;">
-                    <div style="font-size: 0.72rem; text-transform: uppercase; color: #64748b; font-weight: 700;">Protokol Enkripsi</div>
+                    <div style="font-size: 0.72rem; text-transform: uppercase; color: #64748b; font-weight: 700;">Protokol Enkripsi &amp; Open Graph</div>
                     <div style="font-size: 1.15rem; font-weight: 800; color: {'#059669' if crawl['https_active'] else '#dc2626'};">
                         🔒 {'HTTPS Aktif' if crawl['https_active'] else 'HTTP Tidak Aman'}
                     </div>
                     <div style="font-size: 0.75rem; color: #059669; font-weight: 600;">
-                        {'✓ Sertifikat SSL Terverifikasi' if crawl['ssl_verified'] else '⚠️ Sertifikat SSL tidak valid'}
+                        {'✓ OG Tags Terdeteksi' if crawl.get('html_inspections', {}).get('has_open_graph') else '⚠️ OG Tags Belum Ada'}
                     </div>
                 </div>
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 0.75rem 1rem; border-radius: 10px;">
-                    <div style="font-size: 0.72rem; text-transform: uppercase; color: #64748b; font-weight: 700;">File /robots.txt</div>
+                    <div style="font-size: 0.72rem; text-transform: uppercase; color: #64748b; font-weight: 700;">Berkas /llms.txt &amp; robots.txt</div>
                     <div style="font-size: 1.15rem; font-weight: 800; color: #0f172a;">
-                        📄 {'Ditemukan (200 OK)' if crawl['robots_found'] else 'Default Open (404)'}
+                        📄 {'llms.txt Ada' if crawl.get('llms_txt_found') else 'llms.txt Belum Ada'}
                     </div>
                     <div style="font-size: 0.75rem; color: {'#059669' if crawl['tech_robots_passed'] else '#dc2626'}; font-weight: 600;">
                         {'✓ Seluruh Bot AI Diizinkan' if crawl['tech_robots_passed'] else '⚠️ Ada Bot AI Diblokir'}
@@ -703,7 +718,7 @@ with tab_audit:
 
         st.markdown("---")
 
-    # Render 4 Pilar
+    # Render 3 Pilar GEO Riil
     for p_key, p_val in GEO_PILLARS.items():
         p_res = pillar_results[p_key]
         with st.container():
@@ -719,6 +734,9 @@ with tab_audit:
                 <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1rem;">{p_val['description']}</p>
             """, unsafe_allow_html=True)
 
+            if p_key == "pilar_2" and sampling_audit_state:
+                st.info(f"💡 Skor Pilar 2 tersinkronisasi presisi dari **5-Time Sampling AI**: Probabilitas **{sampling_audit_state['probability_score']}%** ({sampling_audit_state['found_count']}/5 Run)")
+
             # Checkbox per indikator
             for ind in p_val["indicators"]:
                 ind_id = ind["id"]
@@ -726,24 +744,145 @@ with tab_audit:
                 with col_chk:
                     is_checked = st.checkbox(
                         label=f"**{ind['label']}** (+{ind['weight_total']}%)",
-                        value=st.session_state[ind_id],
+                        value=st.session_state.get(ind_id, False),
                         key=f"chk_{ind_id}",
                         help=ind["help"]
                     )
                     # Sinkronkan ke session_state utama jika berubah
-                    if is_checked != st.session_state[ind_id]:
+                    if is_checked != st.session_state.get(ind_id, False):
                         st.session_state[ind_id] = is_checked
                         st.rerun()
 
                     st.markdown(f"<span style='color: #64748b; font-size: 0.85rem; margin-left: 1.8rem; display: block;'>{ind['sublabel']}</span>", unsafe_allow_html=True)
                 
                 with col_exp:
-                    if st.session_state[ind_id]:
+                    if st.session_state.get(ind_id, False):
                         st.success("✅ Terpenuhi")
                     else:
                         st.warning("⚠️ Belum Ada")
 
             st.markdown("</div>", unsafe_allow_html=True)
+
+    # ==============================================================================
+    # MODUL REVENUE IMPACT & DETEKSI KELEMAHAN RETRIEVAL LLM
+    # ==============================================================================
+    st.markdown("---")
+    st.markdown("### 💰 Revenue Impact & LLM Retrieval Weakness Detection")
+    st.caption("Diagnosis korelasi visibilitas AI dengan potensi kehilangan omzet calon pembeli (Buyer Intent) serta analisis titik lemah retrieval model bahasa.")
+
+    # 1. Alert Box Potensi Kehilangan Omzet
+    high_intent_data = revenue_analysis["intent_breakdown"]["high_intent"]
+    if high_intent_data["has_lost_revenue"]:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #fef2f2 0%, #fff1f2 100%); border: 2px solid #ef4444; border-radius: 14px; padding: 1.3rem 1.6rem; margin-bottom: 1.5rem; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.08);">
+            <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem;">
+                <span style="font-size: 1.5rem;">⚠️</span>
+                <strong style="color: #991b1b; font-size: 1.18rem;">POTENTIAL LOST REVENUE ALERT</strong>
+                <span style="background: #ef4444; color: white; font-size: 0.72rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">HIGH-INTENT BUYER RISK</span>
+            </div>
+            <p style="color: #7f1d1d; font-size: 0.94rem; line-height: 1.6; margin-bottom: 0.4rem;">
+                {high_intent_data['alert_description']}
+            </p>
+            <div style="font-size: 0.85rem; color: #b91c1c; font-weight: 600;">
+                💡 <strong>Koreksi Segera:</strong> Lengkapi Schema Product dengan harga transparan dan unggah berkas <code>/llms.txt</code> agar AI merekomendasikan bisnis Anda di atas kompetitor.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%); border: 2px solid #10b981; border-radius: 14px; padding: 1.3rem 1.6rem; margin-bottom: 1.5rem; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.08);">
+            <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem;">
+                <span style="font-size: 1.5rem;">✅</span>
+                <strong style="color: #065f46; font-size: 1.18rem;">REVENUE OPPORTUNITY SECURED</strong>
+                <span style="background: #10b981; color: white; font-size: 0.72rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">COMMERCIAL INTENT CONVERTED</span>
+            </div>
+            <p style="color: #047857; font-size: 0.94rem; line-height: 1.6; margin-bottom: 0.2rem;">
+                {high_intent_data['alert_description']}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 2. Klasifikasi Buyer Intent
+    col_int1, col_int2 = st.columns(2)
+    with col_int1:
+        st.markdown(f"""
+        <div style="background: white; border: 1.5px solid {'#10b981' if high_intent_data['is_mentioned'] else '#ef4444'}; border-radius: 12px; padding: 1.1rem 1.3rem; height: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <strong style="color: #0f172a; font-size: 1rem;">🎯 High-Intent (Siap Beli)</strong>
+                <span style="font-size: 0.78rem; font-weight: 700;">{high_intent_data['status_label']}</span>
+            </div>
+            <p style="color: #64748b; font-size: 0.84rem; margin-bottom: 0.6rem;">{high_intent_data['intent_description']}</p>
+            <div style="background: #f8fafc; border-left: 3px solid #3b82f6; padding: 0.6rem 0.8rem; border-radius: 0 6px 6px 0; font-size: 0.82rem; color: #1e293b; font-style: italic;">
+                "{high_intent_data['query_example']}"
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_int2:
+        exploratory_data = revenue_analysis["intent_breakdown"]["exploratory"]
+        st.markdown(f"""
+        <div style="background: white; border: 1.5px solid {'#10b981' if exploratory_data['is_mentioned'] else '#f59e0b'}; border-radius: 12px; padding: 1.1rem 1.3rem; height: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <strong style="color: #0f172a; font-size: 1rem;">🔍 Exploratory (Solusi &amp; Riset)</strong>
+                <span style="font-size: 0.78rem; font-weight: 700;">{exploratory_data['status_label']}</span>
+            </div>
+            <p style="color: #64748b; font-size: 0.84rem; margin-bottom: 0.6rem;">{exploratory_data['intent_description']}</p>
+            <div style="background: #f8fafc; border-left: 3px solid #8b5cf6; padding: 0.6rem 0.8rem; border-radius: 0 6px 6px 0; font-size: 0.82rem; color: #1e293b; font-style: italic;">
+                "{exploratory_data['query_example']}"
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 3. Deteksi Kelemahan Spesifik Retrieval LLM
+    st.markdown("##### 🔬 Kelemahan Spesifik Retrieval Mesin AI yang Terdeteksi:")
+    if not revenue_analysis["specific_weaknesses"]:
+        st.success("🎉 Tidak terdeteksi kelemahan retrieval kritis pada profil website Anda!")
+    else:
+        for w in revenue_analysis["specific_weaknesses"]:
+            st.markdown(f"""
+            <div style="background: white; border-left: 4px solid {w['impact_color']}; border-radius: 0 10px 10px 0; padding: 0.9rem 1.2rem; margin-bottom: 0.7rem; border-top: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                    <strong style="color: #0f172a; font-size: 0.98rem;">{w['title']}</strong>
+                    <span style="font-size: 0.72rem; font-weight: 800; background: {w['impact_color']}; color: white; padding: 2px 7px; border-radius: 4px;">Tingkat: {w['impact']}</span>
+                </div>
+                <p style="color: #475569; font-size: 0.86rem; margin-bottom: 0.4rem; line-height: 1.5;">{w['explanation']}</p>
+                <div style="font-size: 0.83rem; color: #059669; font-weight: 600;">
+                    🛠️ Solusi: {w['solution']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # 4. Tiga Langkah Aksi Prioritas
+    st.markdown("##### 🚀 3 Langkah Aksi Prioritas:")
+    col_act1, col_act2, col_act3 = st.columns(3)
+    actions = revenue_analysis["priority_action_steps"]
+    with col_act1:
+        st.markdown(f"""
+        <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 12px; padding: 1rem 1.1rem; height: 100%;">
+            <span style="background: {actions[0]['badge_color']}; color: white; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px;">{actions[0]['priority']} ({actions[0]['timeframe']})</span>
+            <h5 style="margin: 0.5rem 0 0.3rem 0; color: #064e3b; font-size: 0.95rem;">{actions[0]['title']}</h5>
+            <p style="color: #14532d; font-size: 0.82rem; line-height: 1.5; margin-bottom: 0.4rem;">{actions[0]['description']}</p>
+            <div style="font-size: 0.75rem; color: #047857; font-weight: 700;">📈 {actions[0]['expected_impact']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_act2:
+        st.markdown(f"""
+        <div style="background: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 12px; padding: 1rem 1.1rem; height: 100%;">
+            <span style="background: {actions[1]['badge_color']}; color: white; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px;">{actions[1]['priority']} ({actions[1]['timeframe']})</span>
+            <h5 style="margin: 0.5rem 0 0.3rem 0; color: #1e3a8a; font-size: 0.95rem;">{actions[1]['title']}</h5>
+            <p style="color: #1e40af; font-size: 0.82rem; line-height: 1.5; margin-bottom: 0.4rem;">{actions[1]['description']}</p>
+            <div style="font-size: 0.75rem; color: #1d4ed8; font-weight: 700;">📈 {actions[1]['expected_impact']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_act3:
+        st.markdown(f"""
+        <div style="background: #faf5ff; border: 1.5px solid #d8b4fe; border-radius: 12px; padding: 1rem 1.1rem; height: 100%;">
+            <span style="background: {actions[2]['badge_color']}; color: white; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px;">{actions[2]['priority']} ({actions[2]['timeframe']})</span>
+            <h5 style="margin: 0.5rem 0 0.3rem 0; color: #581c87; font-size: 0.95rem;">{actions[2]['title']}</h5>
+            <p style="color: #6b21a8; font-size: 0.82rem; line-height: 1.5; margin-bottom: 0.4rem;">{actions[2]['description']}</p>
+            <div style="font-size: 0.75rem; color: #7e22ce; font-weight: 700;">📈 {actions[2]['expected_impact']}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 # ==============================================================================
@@ -764,23 +903,21 @@ with tab_dashboard:
     </div>
     """, unsafe_allow_html=True)
 
-    # Dua Grafik Plotly: Radar Chart & Bar Chart
+    # Dua Grafik Plotly: Radar Chart & Bar Chart (3 Pilar)
     col_chart1, col_chart2 = st.columns(2)
 
     with col_chart1:
-        st.markdown("#### 🕸️ Radar Keseimbangan 4 Pilar GEO")
-        # Data untuk Radar Chart
+        st.markdown("#### 🕸️ Radar Keseimbangan 3 Pilar GEO")
+        # Data untuk Radar Chart 3 Pilar
         categories_radar = [
-            "Aksesibilitas Teknis (20%)",
-            "Struktur Konten & BLUF (30%)",
-            "Schema JSON-LD (20%)",
-            "Otoritas Off-Page (30%)"
+            "Crawlability & Readability (30%)",
+            "Share of Model / AI Visibility (40%)",
+            "Grounding & Citations (30%)"
         ]
         values_radar = [
             pillar_results["pilar_1"]["percentage"],
             pillar_results["pilar_2"]["percentage"],
-            pillar_results["pilar_3"]["percentage"],
-            pillar_results["pilar_4"]["percentage"]
+            pillar_results["pilar_3"]["percentage"]
         ]
         # Tutup polygon radar
         categories_radar_closed = categories_radar + [categories_radar[0]]
@@ -813,10 +950,9 @@ with tab_dashboard:
 
     with col_chart2:
         st.markdown("#### 📊 Ketercapaian Skor vs Bobot Maksimal")
-        # Bar chart perolehan nilai vs max nilai
-        pilar_names = ["Teknis (20%)", "Konten BLUF (30%)", "Schema (20%)", "Otoritas (30%)"]
-        earned_vals = [pillar_results[p]["earned_score"] for p in ["pilar_1", "pilar_2", "pilar_3", "pilar_4"]]
-        max_vals = [pillar_results[p]["max_score"] for p in ["pilar_1", "pilar_2", "pilar_3", "pilar_4"]]
+        pilar_names = ["Crawlability (30 pt)", "AI Visibility (40 pt)", "Grounding (30 pt)"]
+        earned_vals = [pillar_results[p]["earned_score"] for p in ["pilar_1", "pilar_2", "pilar_3"]]
+        max_vals = [pillar_results[p]["max_score"] for p in ["pilar_1", "pilar_2", "pilar_3"]]
 
         fig_bar = go.Figure()
         fig_bar.add_trace(go.Bar(
@@ -837,7 +973,7 @@ with tab_dashboard:
         fig_bar.update_layout(
             barmode='overlay',
             height=360,
-            yaxis=dict(range=[0, 35], title="Poin Skor"),
+            yaxis=dict(range=[0, 45], title="Poin Skor"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             margin=dict(l=40, r=20, t=30, b=30)
         )
@@ -853,7 +989,7 @@ with tab_dashboard:
     )
 
     if not citation_gaps:
-        st.success("🎉 **Luar Biasa! Tidak Ditemukan Kesenjangan Kutipan yang Kritis.** Website dan merek Anda telah memenuhi seluruh 10 indikator dasar GEO.")
+        st.success("🎉 **Luar Biasa! Tidak Ditemukan Kesenjangan Kutipan yang Kritis.** Website dan merek Anda telah memenuhi indikator dasar GEO.")
     else:
         for gap in citation_gaps:
             card_class = "gap-card-critical" if "Kritis" in gap["impact"] or "Tinggi" in gap["impact"] else "gap-card"
@@ -921,30 +1057,34 @@ Tanggal Audit: {datetime.now().strftime('%d %B %Y')}
 Aplikasi: GEO Audit App Nusantara
 
 ## 1. IDENTITAS UMKM
-- Nama Merek: {st.session_state['brand_name']}
-- Website: {st.session_state['website_url']}
+- Nama Merek: {st.session_state['brand_name'] or 'Merek UMKM'}
+- Website: {st.session_state['website_url'] or '-'}
 - Kategori Bisnis: {st.session_state['business_category']}
-- Lokasi: {st.session_state['location_info']}
-- WhatsApp: {st.session_state['phone_number']}
+- Lokasi: {st.session_state['location_info'] or '-'}
+- WhatsApp: {st.session_state['phone_number'] or '-'}
 
-## 2. HASIL SKOR AUDIT
+## 2. HASIL SKOR AUDIT (3 PILAR RIIL)
 - Total Skor GEO: {total_score} / 100
 - Kategori Kematangan: {tier_badge} {tier_name}
 - Deskripsi Status: {tier_description}
 
-### Rincian Ketercapaian Pilar:
-1. Aksesibilitas Teknis & AI Crawlers (20%): {pillar_results['pilar_1']['earned_score']} / {pillar_results['pilar_1']['max_score']} pt ({pillar_results['pilar_1']['percentage']}%)
-2. Kejelasan Struktur Konten & BLUF (30%): {pillar_results['pilar_2']['earned_score']} / {pillar_results['pilar_2']['max_score']} pt ({pillar_results['pilar_2']['percentage']}%)
-3. Data Terstruktur / Schema JSON-LD (20%): {pillar_results['pilar_3']['earned_score']} / {pillar_results['pilar_3']['max_score']} pt ({pillar_results['pilar_3']['percentage']}%)
-4. Otoritas Merek & Sebutan Luar (30%): {pillar_results['pilar_4']['earned_score']} / {pillar_results['pilar_4']['max_score']} pt ({pillar_results['pilar_4']['percentage']}%)
+### Rincian Ketercapaian 3 Pilar:
+1. Crawlability & Machine-Readability (30%): {pillar_results['pilar_1']['earned_score']} / {pillar_results['pilar_1']['max_score']} pt ({pillar_results['pilar_1']['percentage']}%)
+2. Share of Model / AI Visibility (40%): {pillar_results['pilar_2']['earned_score']} / {pillar_results['pilar_2']['max_score']} pt ({pillar_results['pilar_2']['percentage']}%)
+3. Grounding & Citations (30%): {pillar_results['pilar_3']['earned_score']} / {pillar_results['pilar_3']['max_score']} pt ({pillar_results['pilar_3']['percentage']}%)
 
-## 3. KESENJANGAN KUTIPAN (CITATION GAPS)
+## 3. DIAGNOSIS POTENSI KEHILANGAN OMZET & BUYER INTENT
+- Kueri Siap Beli (High-Intent): {high_intent_data['status_label']}
+- Kueri Eksplorasi: {revenue_analysis['intent_breakdown']['exploratory']['status_label']}
+- Peringatan Finansial: {high_intent_data['alert_title']} - {high_intent_data['alert_description']}
+
+## 4. KESENJANGAN KUTIPAN (CITATION GAPS)
 """
     for g in citation_gaps:
         report_markdown += f"- [{g['impact']}] {g['gap_title']}: {g['fix_summary']}\n"
 
     report_markdown += f"""
-## 4. REKOMENDASI PRIORITAS
+## 5. REKOMENDASI PRIORITAS
 ### Quick Wins:
 """
     for q in recom_data["quick_wins"]:
@@ -965,7 +1105,7 @@ Solusi AI-Ready untuk UMKM Indonesia Naik Kelas
     st.download_button(
         label="📄 Unduh Laporan Lengkap (.md / Markdown)",
         data=report_markdown,
-        file_name=f"GEO_Audit_{st.session_state['brand_name'].replace(' ', '_')}.md",
+        file_name=f"GEO_Audit_{st.session_state['brand_name'].replace(' ', '_') if st.session_state['brand_name'] else 'UMKM'}.md",
         mime="text/markdown",
         help="Unduh file laporan hasil audit untuk arsip atau dikirimkan ke klien/manajemen."
     )
@@ -998,7 +1138,8 @@ with tab_testing:
     with col_inp1:
         cur_brand_name = st.text_input(
             "Nama Merek Utama:",
-            value=st.session_state.get("brand_name", "Kopi Arabika Toraja Baji"),
+            value=st.session_state.get("brand_name", ""),
+            placeholder="Misal: CV Tani Organik Nusantara / Nama Merek Anda",
             key="ai_input_brand_name",
             help="Nama merek utama yang akan dicocokkan secara ketat dengan batas kata (\\b)."
         )
@@ -1007,13 +1148,14 @@ with tab_testing:
             st.session_state["ai_test_5x_responses"] = None
 
     with col_inp2:
-        default_alias_str = st.session_state.get(
-            "brand_aliases",
-            f"{st.session_state.get('website_url', 'kopitorajabaji.id').replace('https://','').replace('http://','').replace('/','')}, Kopi Toraja Baji, Toraja Baji"
-        )
+        default_alias_str = st.session_state.get("brand_aliases", "")
+        if not default_alias_str and st.session_state.get("website_url"):
+            clean_host = st.session_state.get("website_url", "").replace("https://","").replace("http://","").strip("/").split("/")[0]
+            default_alias_str = f"{clean_host}, {cur_brand_name}" if cur_brand_name else clean_host
         cur_aliases_input = st.text_input(
             "Daftar Alias / Variasi Merek (pisahkan koma):",
             value=default_alias_str,
+            placeholder="Domain website, akronim, variasi ejaan resmi",
             key="ai_input_brand_aliases",
             help="Domain website, akronim, variasi ejaan resmi, atau nama tanpa spasi yang juga sah dianggap sebagai sebutan merek Anda."
         )
@@ -1025,7 +1167,9 @@ with tab_testing:
     active_aliases = [a.strip() for a in cur_aliases_input.split(",") if a.strip()]
 
     # 2. AREA TEKS KUERI PROMPT PENGUJIAN
-    default_prompt_text = f"Rekomendasikan {st.session_state.get('business_category', 'Kuliner & Minuman')} terbaik dari {st.session_state.get('location_info', 'Makale, Toraja').split(',')[0]} yang berkualitas tinggi dan cocok untuk oleh-oleh."
+    b_cat = st.session_state.get('business_category', 'Pertanian & Agribisnis')
+    b_loc = st.session_state.get('location_info', 'Bandung, Jawa Barat').split(',')[0].strip() or 'Indonesia'
+    default_prompt_text = f"Rekomendasikan {b_cat} terbaik dari {b_loc} yang berkualitas tinggi, terpercaya, dan siap dipesan sekarang."
     
     col_pr1, col_pr2 = st.columns([3, 1])
     with col_pr1:
@@ -1139,15 +1283,27 @@ with tab_testing:
                 st.rerun()
 
         with sub_tab_api:
-            st.info("⚡ Masukkan API Key untuk melakukan 5 kali pemanggilan sekuensial secara langsung ke server OpenAI atau Perplexity.")
+            st.info("⚡ Masukkan API Key untuk melakukan 5 kali pemanggilan sekuensial secara langsung ke server OpenAI, Perplexity, atau Gemini.")
             col_ap1, col_ap2, col_ap3 = st.columns([1, 2, 1])
             with col_ap1:
-                api_provider = st.selectbox("Provider API:", ["OpenAI (ChatGPT)", "Perplexity AI"], key="api_5x_provider")
+                api_provider = st.selectbox(
+                    "Provider API:",
+                    ["OpenAI (ChatGPT)", "Perplexity AI", "Google Gemini (gemini-1.5-flash)"],
+                    key="api_5x_provider"
+                )
             with col_ap2:
                 api_key_val = st.text_input("API Key:", type="password", value=st.session_state.get("ai_test_api_key", ""), key="api_5x_key_input")
                 st.session_state["ai_test_api_key"] = api_key_val
             with col_ap3:
-                model_tag = "sonar" if "Perplexity" in api_provider else "gpt-4o-mini"
+                if "Perplexity" in api_provider:
+                    model_tag = "sonar"
+                    p_code = "perplexity"
+                elif "Gemini" in api_provider:
+                    model_tag = "gemini-1.5-flash"
+                    p_code = "gemini"
+                else:
+                    model_tag = "gpt-4o-mini"
+                    p_code = "openai"
                 st.caption(f"Model: `{model_tag}` (Temp: 0.7)")
 
             if st.button("🚀 Jalankan 5x Sampling Live via API", type="primary", use_container_width=True):
@@ -1155,7 +1311,6 @@ with tab_testing:
                     st.error("Silakan masukkan API Key Anda.")
                 else:
                     with st.spinner("Mengirimkan 5 kueri sekuensial ke server API..."):
-                        p_code = "perplexity" if "Perplexity" in api_provider else "openai"
                         live_res = fetch_live_ai_completion_5x(
                             provider=p_code,
                             api_key=api_key_val,
@@ -1182,6 +1337,8 @@ with tab_testing:
         aliases=active_aliases,
         sample_responses=current_samples
     )
+    # Sinkronkan hasil audit_data ke session_state untuk menggerakkan Pilar 2 dan Revenue Impact
+    st.session_state["ai_test_5x_audit"] = audit_data
 
     prob_score = audit_data["probability_score"]
     found_runs = audit_data["found_count"]
@@ -1327,7 +1484,15 @@ with tab_testing:
     # --------------------------------------------------------------------------
     with subtab3:
         st.markdown("#### 🗺️ Peta Kesenjangan Kutipan (Citation Gap Map)")
-        raw_comp_str = st.session_state.get("ai_test_competitors", "Kopi Kenangan, Otten Coffee, Anomali Coffee, Kapal Api Specialty")
+        default_cat_comps = ", ".join(get_default_competitors_by_category(st.session_state.get("business_category", ""), st.session_state.get("location_info", "")))
+        comp_val = st.session_state.get("ai_test_competitors") or default_cat_comps
+        raw_comp_str = st.text_input(
+            "Daftar Kompetitor Pembanding (pisahkan koma):",
+            value=comp_val,
+            key="ai_input_competitors_list",
+            help="Daftar nama kompetitor di kategori bisnis yang sama untuk dihitung rasio sebutan dan Share of Voice (SOV)."
+        )
+        st.session_state["ai_test_competitors"] = raw_comp_str
         active_comp_list = [c.strip() for c in raw_comp_str.split(",") if c.strip()]
 
         sim_5x_records = []
@@ -1445,8 +1610,10 @@ with tab_autofix:
         "dengan data UMKM Anda di sidebar. Salin langsung ke website Anda untuk menutup celah kesenjangan kutipan!"
     )
 
-    gen_tab1, gen_tab2, gen_tab3, gen_tab4 = st.tabs([
+    gen_tab1, gen_tab2, gen_tab3, gen_tab4, gen_tab5, gen_tab6 = st.tabs([
         "🏷️ Schema JSON-LD Generator",
+        "📄 Berkas /llms.txt",
+        "🌐 Open Graph & Social Meta",
         "📝 Draf Teks BLUF",
         "🤖 AI robots.txt",
         "💬 Conversational FAQ Generator"
@@ -1495,12 +1662,61 @@ with tab_autofix:
         st.download_button(
             label="💾 Unduh Kode Schema (.html / .json)",
             data=code_result,
-            file_name=f"schema_{st.session_state['brand_name'].lower().replace(' ', '_')}.html",
+            file_name=f"schema_{st.session_state['brand_name'].lower().replace(' ', '_') if st.session_state['brand_name'] else 'umkm'}.html",
             mime="text/html"
         )
 
-    # 2. Draf Teks BLUF
+    # 2. Berkas /llms.txt Machine-Readable Generator
     with gen_tab2:
+        st.markdown("#### Generator Berkas /llms.txt Standar Machine-Readable")
+        st.write(
+            "Standar <code>/llms.txt</code> (menurut llmstxt.org) memberikan ringkasan padat dan terstruktur "
+            "tentang identitas bisnis, produk, harga, dan URL rujukan resmi kepada bot AI crawler."
+        )
+        llms_text_code = generate_llms_txt(
+            brand_name=st.session_state["brand_name"],
+            category=st.session_state["business_category"],
+            product_name=st.session_state["product_name"],
+            price_range=st.session_state["price_range"],
+            key_advantages=st.session_state["key_advantages"],
+            location=st.session_state["location_info"],
+            website_url=st.session_state["website_url"],
+            phone=st.session_state["phone_number"]
+        )
+        st.code(llms_text_code, language="markdown")
+        st.download_button(
+            label="💾 Unduh Berkas llms.txt",
+            data=llms_text_code,
+            file_name="llms.txt",
+            mime="text/markdown",
+            help="Simpan dan unggah berkas ini ke direktori root (https://domain-anda.com/llms.txt)."
+        )
+
+    # 3. Open Graph & Social Meta Tags
+    with gen_tab3:
+        st.markdown("#### Generator Open Graph (OG Tags) & Twitter Cards")
+        st.write(
+            "Tag Open Graph memastikan judul entitas, deskripsi keunggulan, dan preview thumbnail "
+            "terbaca dengan pasti oleh peramban dan crawler AI generatif."
+        )
+        og_code = generate_open_graph_meta(
+            brand_name=st.session_state["brand_name"],
+            product_name=st.session_state["product_name"],
+            category=st.session_state["business_category"],
+            website_url=st.session_state["website_url"],
+            key_advantages=st.session_state["key_advantages"]
+        )
+        st.code(og_code, language="html")
+        st.download_button(
+            label="💾 Unduh Snippet Open Graph (.html)",
+            data=og_code,
+            file_name="meta_open_graph.html",
+            mime="text/html",
+            help="Tempelkan kode ini di dalam blok <head> halaman utama website Anda."
+        )
+
+    # 4. Draf Teks BLUF
+    with gen_tab4:
         st.markdown("#### Generator Draf Paragraf BLUF (Bottom Line Up Front)")
         st.write(
             "AI crawler mengekstrak chunk teks pertama di sebuah halaman web. Format **BLUF** memastikan dalam "
@@ -1517,22 +1733,30 @@ with tab_autofix:
             phone=st.session_state["phone_number"]
         )
 
+        b_b = st.session_state.get('brand_name') or 'Brand Anda'
+        b_c = st.session_state.get('business_category') or 'Kategori Produk'
+        b_l = st.session_state.get('location_info') or 'Indonesia'
+        b_p = st.session_state.get('product_name') or 'Produk Unggulan'
+        b_adv = st.session_state.get('key_advantages') or 'Kualitas Terbaik'
+        b_pr = st.session_state.get('price_range') or 'Harga Terjangkau'
+        b_w = st.session_state.get('phone_number') or 'Kontak Resmi'
+
         st.markdown("##### Preview Tampilan Konten BLUF:")
         st.markdown(f"""
-        > **{st.session_state['brand_name']}** adalah produsen dan penyedia **{st.session_state['business_category']}** terkemuka asal **{st.session_state['location_info']}**, yang menghadirkan **{st.session_state['product_name']}** berkualitas tinggi dengan *{st.session_state['key_advantages']}*. Seluruh produk dapat dipesan secara langsung dengan harga mulai dari **{st.session_state['price_range']}**, didukung jaminan pengiriman cepat ke seluruh Indonesia dan layanan konsultasi ramah via WhatsApp di **{st.session_state['phone_number']}**.
+        > **{b_b}** adalah produsen dan penyedia **{b_c}** terkemuka asal **{b_l}**, yang menghadirkan **{b_p}** berkualitas tinggi dengan *{b_adv}*. Seluruh produk dapat dipesan secara langsung dengan harga mulai dari **{b_pr}**, didukung jaminan pengiriman cepat ke seluruh Indonesia dan layanan konsultasi ramah via WhatsApp di **{b_w}**.
         >
-        > - **Kategori & Spesialisasi:** {st.session_state['business_category']} ({st.session_state['product_name']})
-        > - **Standar Kualitas & Keunggulan:** {st.session_state['key_advantages']}
-        > - **Transparansi Harga:** {st.session_state['price_range']} (Tanpa biaya tersembunyi)
-        > - **Pusat Operasional:** {st.session_state['location_info']}
-        > - **Kanal Pemesanan Cepat:** WhatsApp {st.session_state['phone_number']}
+        > - **Kategori & Spesialisasi:** {b_c} ({b_p})
+        > - **Standar Kualitas & Keunggulan:** {b_adv}
+        > - **Transparansi Harga:** {b_pr} (Tanpa biaya tersembunyi)
+        > - **Pusat Operasional:** {b_l}
+        > - **Kanal Pemesanan Cepat:** WhatsApp {b_w}
         """)
 
         st.markdown("##### Kode HTML / Markdown Siap Copas:")
         st.code(bluf_code, language="html")
 
-    # 3. AI robots.txt Generator
-    with gen_tab3:
+    # 5. AI robots.txt Generator
+    with gen_tab5:
         st.markdown("#### Generator robots.txt Ramah Crawler AI")
         st.write(
             "Banyak pemilik website secara tidak sengaja memblokir bot AI atau menggunakan template default "
@@ -1549,8 +1773,8 @@ with tab_autofix:
             help="Simpan dan unggah file ini ke root directory public_html hosting Anda."
         )
 
-    # 4. Conversational FAQ Generator
-    with gen_tab4:
+    # 6. Conversational FAQ Generator
+    with gen_tab6:
         st.markdown("#### Generator 5 FAQ Percakapan Teroptimasi RAG")
         st.write(
             "Pertanyaan calon konsumen ke ChatGPT atau Perplexity bersifat percakapan (*conversational*). "
@@ -1577,13 +1801,13 @@ with tab_autofix:
         st.download_button(
             label="💾 Unduh Seluruh FAQ (.md)",
             data=faq_md_export,
-            file_name=f"FAQ_{st.session_state['brand_name'].replace(' ', '_')}.md",
+            file_name=f"FAQ_{st.session_state['brand_name'].replace(' ', '_') if st.session_state['brand_name'] else 'UMKM'}.md",
             mime="text/markdown"
         )
 
 
 # ==============================================================================
-# TAB 4: PANDUAN EDUKASI GEO NUSANTARA
+# TAB 5: PANDUAN EDUKASI GEO NUSANTARA
 # ==============================================================================
 with tab_guide:
     st.markdown("### 📖 Panduan Lengkap GEO (Generative Engine Optimization) untuk UMKM")
@@ -1603,14 +1827,18 @@ with tab_guide:
         """)
 
     with col_g2:
-        st.markdown("""
+        guide_brand = st.session_state.get('brand_name') or 'Merek Anda'
+        guide_cat = st.session_state.get('business_category') or 'produk'
+        guide_loc = st.session_state.get('location_info') or 'Indonesia'
+        guide_pr = st.session_state.get('price_range') or 'Rp 85.000'
+        st.markdown(f"""
         #### ⚙️ Bagaimana Cara Kerja AI RAG Saat Merekomendasikan Merek?
         
-        1. **Query Masuk**: Pengguna bertanya ke AI: *"Rekomendasikan kopi lokal aromatik dari Sulawesi untuk oleh-oleh yang harganya di bawah 150 ribu."*
-        2. **Retrieval**: AI mencari informasi di web secara real-time via search index bot (GPTBot / PerplexityBot).
-        3. **Semantic Chunking**: AI membaca potongan teks berformat BLUF yang memiliki heading jelas dan angka kuantitatif.
-        4. **Grounding & Entity Validation**: AI mengecek Schema JSON-LD dan ulasan di Google Business Profile untuk memverifikasi keaslian bisnis.
-        5. **Sintesis & Sitasi**: AI menyusun jawaban: *"Salah satu pilihan unggulan adalah **Kopi Toraja Baji** asal Makale, dengan harga Rp 85.000..."* lengkap dengan tautan sumber ke situs Anda!
+        1. **Query Masuk**: Pengguna bertanya ke AI: *"Rekomendasikan {guide_cat} terbaik dari {guide_loc} yang berkualitas tinggi dan siap dipesan."*
+        2. **Retrieval**: AI mencari informasi di web secara real-time via search index bot (GPTBot / PerplexityBot / Google-Extended).
+        3. **Semantic Chunking**: AI membaca potongan teks berformat BLUF yang memiliki heading jelas, spesifikasi, dan angka kuantitatif.
+        4. **Grounding & Entity Validation**: AI mengecek Schema JSON-LD, berkas /llms.txt, dan ulasan di Google Business Profile untuk memverifikasi keaslian bisnis.
+        5. **Sintesis & Sitasi**: AI menyusun jawaban: *"Salah satu pilihan unggulan adalah **{guide_brand}** asal {guide_loc}, dengan harga mulai {guide_pr}..."* lengkap dengan tautan sumber ke situs Anda!
         """)
 
     st.markdown("---")

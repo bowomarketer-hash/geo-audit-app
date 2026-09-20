@@ -1,9 +1,9 @@
 """
 GEO Engine - Modul Kalkulasi, Analisis, dan Rekomendasi
-untuk GEO Audit App Nusantara.
+untuk GEO Audit App Nusantara (3 Pilar GEO Riil & Revenue Impact Engine).
 """
 
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Optional
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -12,132 +12,135 @@ import ssl
 import time
 import re
 
-# Definisi 4 Pilar GEO beserta Bobot & Indikatornya
+
+# ==============================================================================
+# DEFINISI 3 PILAR GEO RIIL (BOBOT TOTAL 100%)
+# ==============================================================================
 GEO_PILLARS = {
     "pilar_1": {
         "id": "pilar_1",
-        "title": "Aksesibilitas Teknis & AI Crawlers",
-        "weight": 0.20,  # 20%
-        "description": "Memastikan bot crawler AI (GPTBot, ClaudeBot, Google-Extended) diizinkan membaca situs dengan cepat dan aman.",
+        "title": "Crawlability & Machine-Readability",
+        "weight": 0.30,  # 30%
+        "description": "Memastikan mesin dan crawler AI membaca identitas bisnis dengan pasti melalui Schema.org JSON-LD, Open Graph, llms.txt, dan izin robots.txt.",
         "icon": "🤖",
         "indicators": [
             {
-                "id": "tech_robots",
-                "label": "Konfigurasi robots.txt mengizinkan AI Crawlers",
-                "sublabel": "Mengizinkan User-agent: GPTBot, ClaudeBot, Google-Extended, dan PerplexityBot untuk melakukan pengindeksan.",
-                "weight_in_pilar": 0.50,  # 10% total
+                "id": "schema_org",
+                "label": "Validasi Schema.org JSON-LD (LocalBusiness / Organization / Product)",
+                "sublabel": "Metadata terstruktur Knowledge Graph yang menegaskan nama merek, produk, harga, dan NAP secara pasti.",
+                "weight_in_pilar": 0.334,
                 "weight_total": 10.0,
-                "help": "Jika robots.txt memblokir bot AI, website Anda akan 'buta' dan tidak pernah disitasi oleh ChatGPT Search atau Perplexity."
+                "help": "Model AI RAG membaca JSON-LD untuk memvalidasi atribut harga, legalitas, dan entitas tanpa harus menebak teks mentah."
             },
             {
-                "id": "tech_https_speed",
-                "label": "Enkripsi HTTPS aktif dan kecepatan muat situs di bawah 3 detik",
-                "sublabel": "Sertifikat SSL valid (HTTPS) dan waktu respon server (TTFB) cepat agar crawler tidak mengalami timeout.",
-                "weight_in_pilar": 0.50,  # 10% total
+                "id": "content_metadata_og",
+                "label": "Open Graph (OG Tags) & Struktur Konten Semantik (BLUF / Heading)",
+                "sublabel": "Tag og:title, og:description, dan hierarki H1-H3 dengan ringkasan proposisi nilai di 50 kata teratas (BLUF).",
+                "weight_in_pilar": 0.333,
                 "weight_total": 10.0,
-                "help": "AI crawler memiliki batas waktu tunggu (crawl timeout) yang sangat ketat. Situs lambat akan dilewati."
+                "help": "AI parser memecah dokumen berdasarkan heading dan membaca meta tag untuk menyusun cuplikan jawaban RAG."
+            },
+            {
+                "id": "tech_robots_llmstxt",
+                "label": "Aksesibilitas AI Crawlers di robots.txt & Keberadaan berkas /llms.txt",
+                "sublabel": "Mengizinkan bot AI (GPTBot, ClaudeBot, PerplexityBot) serta menyediakan ringkasan terstruktur via berkas llms.txt.",
+                "weight_in_pilar": 0.333,
+                "weight_total": 10.0,
+                "help": "Standar baru pemformatan ringkas llms.txt dan robots.txt terbuka adalah syarat mutlak agar situs diindeks mesin pencari generatif."
             }
         ]
     },
     "pilar_2": {
         "id": "pilar_2",
-        "title": "Kejelasan Struktur Konten & BLUF",
-        "weight": 0.30,  # 30%
-        "description": "Menyusun konten dengan prinsip Bottom Line Up Front (BLUF) dan semantik hierarkis agar mudah di-chunking dan di-embed oleh model AI.",
-        "icon": "📝",
+        "title": "Share of Model (AI Visibility)",
+        "weight": 0.40,  # 40%
+        "description": "Mengukur seberapa sering merek Anda secara konsisten dipanggil dan direkomendasikan AI pada kueri non-branded intent.",
+        "icon": "🎯",
         "indicators": [
             {
-                "id": "content_bluf",
-                "label": "Ringkasan produk, keunggulan, dan harga diletakkan di paragraf teratas (BLUF)",
-                "sublabel": "Bottom Line Up Front: Konsumen dan AI langsung mendapatkan jawaban inti dalam 50 kata pertama tanpa scroll panjang.",
-                "weight_in_pilar": 0.25,  # 7.5% total
-                "weight_total": 7.5,
-                "help": "Model RAG mengekstrak 'chunk' awal dokumen sebagai kandidat jawaban teratas dalam Retrieval context window."
+                "id": "ai_high_intent_visibility",
+                "label": "Keterpanggilan pada Non-Branded High-Intent Queries (Siap Beli)",
+                "sublabel": "Merek muncul saat calon pembeli mencari: 'Rekomendasi [kategori] terbaik di [lokasi] yang berkualitas/siap pesan'.",
+                "weight_in_pilar": 0.50,
+                "weight_total": 20.0,
+                "help": "Kueri transaksional adalah sumber konversi langsung. Jika brand tidak muncul di sini, terjadi 'Potential Lost Revenue'."
             },
             {
-                "id": "content_headings",
-                "label": "Struktur HTML menggunakan hierarki heading semantik yang rapi (H1, H2, H3)",
-                "sublabel": "Heading jelas mendeskripsikan topik bahasan untuk mempermudah pemotongan teks (semantic chunking) oleh AI parser.",
-                "weight_in_pilar": 0.25,  # 7.5% total
-                "weight_total": 7.5,
-                "help": "Parser AI memecah halaman web menjadi chunk berdasarkan tag heading. Heading yang berantakan menghasilkan representasi chunk yang rancu."
-            },
-            {
-                "id": "content_faq",
-                "label": "Terdapat bagian FAQ Percakapan (Conversational FAQ)",
-                "sublabel": "Format tanya-jawab alami yang langsung menjawab pertanyaan spesifik, perbandingan, kecocokan, dan kendala calon pembeli.",
-                "weight_in_pilar": 0.25,  # 7.5% total
-                "weight_total": 7.5,
-                "help": "Pertanyaan pengguna ke chatbot AI bernada percakapan (misal: 'Apakah kopi ini aman untuk lambung?'). Format FAQ mempermudah direct-matching."
-            },
-            {
-                "id": "content_data",
-                "label": "Konten mencantumkan data spesifik, angka kuantitatif, dimensi, atau statistik",
-                "sublabel": "Mencantumkan harga transparan (Rp), berat (gram/kg), komposisi persentase, nomor sertifikasi BPOM/Halal, dan garansi.",
-                "weight_in_pilar": 0.25,  # 7.5% total
-                "weight_total": 7.5,
-                "help": "Riset akademis GEO membuktikan bahwa menyertakan data kuantitatif dan statistik meningkatkan peluang sitasi AI hingga 30-40%."
+                "id": "ai_exploratory_visibility",
+                "label": "Keterpanggilan pada Exploratory & Problem-Solving Queries (Eksplorasi)",
+                "sublabel": "Merek muncul saat pengguna menanyakan solusi kendala spesifik atau perbandingan keunggulan produk di niche terkait.",
+                "weight_in_pilar": 0.50,
+                "weight_total": 20.0,
+                "help": "Kueri eksplorasi membangun brand discovery di puncak funnel (top-of-funnel) sebelum keputusan pembelian."
             }
         ]
     },
     "pilar_3": {
         "id": "pilar_3",
-        "title": "Data Terstruktur / Schema JSON-LD",
-        "weight": 0.20,  # 20%
-        "description": "Menyediakan metadata mesin (Knowledge Graph) agar entitas bisnis dan produk terbaca dengan kepastian 100% tanpa ambiguitas.",
-        "icon": "🏷️",
-        "indicators": [
-            {
-                "id": "schema_org",
-                "label": "Terpasang Organization / LocalBusiness Schema (Nama, Alamat/NAP, Kontak)",
-                "sublabel": "Kode JSON-LD yang menegaskan nama resmi merek, koordinat lokasi, kontak WhatsApp bisnis, dan profil media sosial.",
-                "weight_in_pilar": 0.50,  # 10% total
-                "weight_total": 10.0,
-                "help": "AI memerlukan kepastian data NAP (Name, Address, Phone) agar tidak melakukan halusinasi saat merekomendasikan UMKM lokal."
-            },
-            {
-                "id": "schema_product_faq",
-                "label": "Terpasang Product Schema atau FAQPage Schema pada halaman utama",
-                "sublabel": "Metadata rinci mengenai item produk, rentang harga, ketersediaan stok, dan daftar pertanyaan yang terjawab.",
-                "weight_in_pilar": 0.50,  # 10% total
-                "weight_total": 10.0,
-                "help": "Google AI Overviews dan ChatGPT Shopping secara langsung membaca Product Schema untuk menampilkan cuplikan kartu produk."
-            }
-        ]
-    },
-    "pilar_4": {
-        "id": "pilar_4",
-        "title": "Otoritas Merek & Sebutan Luar / Off-Page",
+        "title": "Grounding & Citations",
         "weight": 0.30,  # 30%
-        "description": "Membangun jejak konsensus multi-sumber di ekosistem internet agar AI mempercayai keaslian dan reputasi bisnis Anda.",
-        "icon": "🌐",
+        "description": "Mengukur kehadiran tautan domain resmi sebagai sitasi rujukan terverifikasi serta jejak konsensus pihak ketiga.",
+        "icon": "🔗",
         "indicators": [
             {
-                "id": "offpage_youtube",
-                "label": "Memiliki video ulasan / demo produk di YouTube dengan transkrip dan teks",
-                "sublabel": "AI multimodal (seperti Gemini & ChatGPT) secara aktif menelusuri transkrip video YouTube untuk mencari testimoni otentik.",
-                "weight_in_pilar": 0.50,  # 15% total
+                "id": "citation_official_domain",
+                "label": "Rasio Grounding Domain Resmi Website (Official URL Citations)",
+                "sublabel": "Domain website resmi UMKM tercantum sebagai tautan sitasi aktif (markdown link / footnote) dalam jawaban AI.",
+                "weight_in_pilar": 0.50,
                 "weight_total": 15.0,
-                "help": "Transkrip video di YouTube merupakan sumber grounding utama bagi Gemini dan AI Overviews untuk merekomendasikan produk lokal."
+                "help": "Sitasi domain resmi membuktikan grounding faktual: AI tidak sekadar menyebut nama, tapi mengarahkan pembeli langsung ke situs Anda."
             },
             {
-                "id": "offpage_mentions",
-                "label": "Nama merek disebut/diulas di platform luar (Google Business, listicles, forum)",
-                "sublabel": "Mendapatkan sebutan (unlinked / linked brand mentions) di Google Maps/GBP, media lokal, Reddit, Quora, atau portal komunitas.",
-                "weight_in_pilar": 0.50,  # 15% total
+                "id": "citation_multi_source",
+                "label": "Jejak Konsensus Eksternal & Multi-Source Mentions",
+                "sublabel": "Nama merek diperkuat oleh ulasan pelanggan, profil Google Business Profile terverifikasi, atau artikel direktori lokal.",
+                "weight_in_pilar": 0.50,
                 "weight_total": 15.0,
-                "help": "RAG AI melakukan triangulasi data: Jika nama merek Anda hanya ada di web sendiri, AI ragu merekomendasikannya karena minim validasi publik."
+                "help": "AI melakukan triangulasi data lintas platform. Jika merek hanya ada di web sendiri tanpa jejak luar, tingkat keyakinan AI akan rendah."
             }
         ]
     }
 }
 
 
-def calculate_geo_score(answers: Dict[str, bool]) -> Dict[str, Any]:
+def normalize_answers(answers: Dict[str, bool]) -> Dict[str, bool]:
     """
-    Menghitung skor total GEO (0-100), skor per pilar (0-100% dan kontribusi berbobot),
-    serta menentukan kategori tingkat kematangan (maturity tier).
+    Menyelaraskan kunci indikator dari state checklist lama maupun baru
+    ke dalam format 3 pilar yang terstandar.
     """
+    norm = {}
+
+    # Pilar 1
+    norm["schema_org"] = bool(answers.get("schema_org") or answers.get("schema_product_faq"))
+    norm["content_metadata_og"] = bool(answers.get("content_metadata_og") or answers.get("content_bluf") or answers.get("content_headings"))
+    norm["tech_robots_llmstxt"] = bool(answers.get("tech_robots_llmstxt") or answers.get("tech_robots"))
+
+    # Pilar 2
+    norm["ai_high_intent_visibility"] = bool(answers.get("ai_high_intent_visibility") or answers.get("content_faq") or answers.get("content_data"))
+    norm["ai_exploratory_visibility"] = bool(answers.get("ai_exploratory_visibility") or answers.get("offpage_youtube"))
+
+    # Pilar 3
+    norm["citation_official_domain"] = bool(answers.get("citation_official_domain") or answers.get("tech_https_speed"))
+    norm["citation_multi_source"] = bool(answers.get("citation_multi_source") or answers.get("offpage_mentions"))
+
+    return norm
+
+
+def calculate_geo_score(
+    answers: Dict[str, bool],
+    sampling_data: Optional[Dict[str, Any]] = None,
+    citation_data: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Menghitung skor total GEO (skala 0-100 transparan) berbasis 3 Pilar:
+    - Pilar 1: Crawlability & Machine-Readability (30 Poin)
+    - Pilar 2: Share of Model / AI Visibility (40 Poin)
+    - Pilar 3: Grounding & Citations (30 Poin)
+    
+    Jika data sampling AI (sampling_data) tersedia, skor Pilar 2 akan dihitung
+    secara real-time berdasarkan Citation Probability Score (5-Time Sampling).
+    """
+    norm_answers = normalize_answers(answers)
     pillar_results = {}
     total_score = 0.0
 
@@ -147,15 +150,21 @@ def calculate_geo_score(answers: Dict[str, bool]) -> Dict[str, Any]:
         checked_count = 0
         p_earned_score = 0.0
 
-        for ind in p_info["indicators"]:
-            ind_id = ind["id"]
-            if answers.get(ind_id, False):
-                checked_count += 1
-                p_earned_score += ind["weight_total"]
+        if p_id == "pilar_2" and sampling_data and "probability_score" in sampling_data:
+            # Kalkulasi dinamis Pilar 2 dari hasil sampling nyata
+            prob = float(sampling_data.get("probability_score", 0.0))
+            p_earned_score = round((prob / 100.0) * (p_weight * 100.0), 1)
+            p_percentage = prob
+            checked_count = int(round((prob / 100.0) * p_total_indicators))
+        else:
+            for ind in p_info["indicators"]:
+                ind_id = ind["id"]
+                if norm_answers.get(ind_id, False):
+                    checked_count += 1
+                    p_earned_score += ind["weight_total"]
+            p_percentage = (checked_count / p_total_indicators) * 100 if p_total_indicators > 0 else 0.0
 
-        # Persentase ketercapaian pilar ini (0 - 100%)
-        p_percentage = (checked_count / p_total_indicators) * 100 if p_total_indicators > 0 else 0
-        
+        p_earned_score = min(p_earned_score, round(p_weight * 100.0, 1))
         pillar_results[p_id] = {
             "title": p_info["title"],
             "icon": p_info["icon"],
@@ -169,28 +178,28 @@ def calculate_geo_score(answers: Dict[str, bool]) -> Dict[str, Any]:
         }
         total_score += p_earned_score
 
-    total_score = round(total_score, 1)
+    total_score = min(round(total_score, 1), 100.0)
 
-    # Menentukan Kategori Kematangan
-    if total_score >= 80:
+    # Kategori Kematangan (Maturity Tiers)
+    if total_score >= 80.0:
         tier_key = "ai_ready"
         tier_name = "AI-Ready (Sangat Siap)"
         tier_color = "#10B981"  # Emerald Green
         tier_badge = "🟢"
         tier_description = (
-            "Luar biasa! Website dan merek Anda memiliki fondasi GEO yang sangat kuat. "
-            "Mesin pencari AI berbasis RAG (ChatGPT, Perplexity, Gemini, Claude) dapat dengan mudah "
-            "mengindeks data Anda, memvalidasi reputasi merek, dan mencantumkannya sebagai sumber kutipan rekomendasi utama."
+            "Luar biasa! Website dan merek Anda memiliki fondasi GEO yang sangat prima (80-100). "
+            "Mesin pencari AI berbasis RAG (ChatGPT, Perplexity, Gemini, Claude) dapat mengindeks data Anda, "
+            "memvalidasi entitas bisnis, dan secara konsisten merekomendasikannya sebagai rujukan utama."
         )
-    elif total_score >= 50:
+    elif total_score >= 50.0:
         tier_key = "needs_optimization"
         tier_name = "Needs Optimization (Cukup Siap)"
-        tier_color = "#F59E0B"  # Amber/Yellow
+        tier_color = "#F59E0B"  # Amber
         tier_badge = "🟡"
         tier_description = (
-            "Website Anda sudah memiliki beberapa elemen penting, namun masih terdapat celah informasi "
-            "yang membuat bot AI ragu memprioritaskan merek Anda dibanding kompetitor. "
-            "Fokuslah menyelesaikan Quick Wins di bagian struktur konten BLUF dan Schema JSON-LD."
+            "Website Anda sudah memiliki beberapa elemen penting, namun masih terdapat celah visibilitas (50-79). "
+            "Sering kali AI ragu menyebutkan merek Anda pada kueri siap beli karena minimnya Schema harga atau llms.txt. "
+            "Selesaikan rekomendasi Quick Wins untuk mengamankan peluang transaksi."
         )
     else:
         tier_key = "invisible"
@@ -198,9 +207,9 @@ def calculate_geo_score(answers: Dict[str, bool]) -> Dict[str, Any]:
         tier_color = "#EF4444"  # Red
         tier_badge = "🔴"
         tier_description = (
-            "Peringatan: Brand Anda saat ini berisiko 'tidak terlihat' (invisible) oleh mesin AI generasi baru. "
-            "Ketika calon pembeli menanyakan rekomendasi produk di niche Anda ke ChatGPT atau Gemini, "
-            "merek Anda hampir pasti tidak akan disebut karena ketiadaan data terstruktur dan aksesibilitas crawler."
+            "Peringatan: Merek Anda saat ini berisiko 'tidak terlihat' (invisible) oleh mesin AI generasi baru (0-49). "
+            "Ketika calon pembeli menanyakan rekomendasi produk di bidang Anda, AI akan merekomendasikan kompetitor "
+            "karena ketiadaan data terstruktur dan aksesibilitas mesin."
         )
 
     return {
@@ -214,109 +223,234 @@ def calculate_geo_score(answers: Dict[str, bool]) -> Dict[str, Any]:
     }
 
 
+def analyze_revenue_impact_and_weaknesses(
+    brand_name: str,
+    category: str,
+    product_name: str,
+    location: str,
+    answers: Dict[str, bool],
+    sampling_audit: Optional[Dict[str, Any]] = None,
+    competitors: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Menganalisis korelasi bisnis, deteksi kelemahan spesifik LLM,
+    serta potensi kehilangan omzet (Potential Lost Revenue) berdasarkan Buyer Intent.
+    """
+    b_name = brand_name.strip() or "Merek Anda"
+    cat = category.strip() or "Produk & Layanan"
+    prod = product_name.strip() or f"Produk Unggulan {b_name}"
+    loc = location.strip() or "Indonesia"
+    comps = competitors or ["Kompetitor Utama"]
+    main_comp = comps[0] if comps else "Kompetitor Pasar"
+
+    norm_answers = normalize_answers(answers)
+    specific_weaknesses = []
+
+    # 1. Deteksi Kelemahan Spesifik
+    if not norm_answers.get("schema_org", False):
+        specific_weaknesses.append({
+            "code": "missing_schema",
+            "category": "Data Terstruktur",
+            "title": "Ketiadaan Schema.org JSON-LD (Product & LocalBusiness)",
+            "impact": "Kritis",
+            "impact_color": "#EF4444",
+            "explanation": (
+                "AI tidak dapat membaca entitas bisnis, rentang harga, atau nomor izin edar secara terstruktur. "
+                f"Akibatnya, saat calon pembeli menanyakan harga pasti {prod}, AI memilih merujuk katalog {main_comp}."
+            ),
+            "solution": "Salin kode Schema Product & LocalBusiness dari tab Auto-Fix Generator ke tag <head> web Anda."
+        })
+
+    if not norm_answers.get("tech_robots_llmstxt", False):
+        specific_weaknesses.append({
+            "code": "missing_llmstxt",
+            "category": "Aksesibilitas Mesin",
+            "title": "Ketiadaan Berkas llms.txt & Potensi Pemblokiran Bot AI",
+            "impact": "Tinggi",
+            "impact_color": "#F59E0B",
+            "explanation": (
+                "Crawler AI (GPTBot, ClaudeBot, PerplexityBot) tidak memiliki dokumen ringkasan machine-readable resmi. "
+                "Hal ini menyebabkan AI rawan berhalusinasi atau mengabaikan web Anda dalam retrieval RAG."
+            ),
+            "solution": "Unggah berkas /llms.txt standar di root domain dan pastikan robots.txt mengizinkan bot AI."
+        })
+
+    if not norm_answers.get("content_metadata_og", False):
+        specific_weaknesses.append({
+            "code": "missing_bluf_og",
+            "category": "Struktur Konten",
+            "title": "Format Proposisi Nilai Belum Menerapkan BLUF",
+            "impact": "Tinggi",
+            "impact_color": "#EF4444",
+            "explanation": (
+                "Proposisi nilai, harga, dan keunggulan terkubur di bagian tengah/bawah halaman. "
+                "Parser chunking AI hanya mengambil potongan teks teratas dokumen dan menganggap web Anda kurang relevan."
+            ),
+            "solution": "Letakkan ringkasan 50 kata pertama (BLUF) berisi nama merek, keunggulan, dan harga di bagian paling atas."
+        })
+
+    if not norm_answers.get("citation_multi_source", False):
+        specific_weaknesses.append({
+            "code": "low_grounding",
+            "category": "Otoritas & Grounding",
+            "title": "Minimnya Jejak Konsensus Pihak Ketiga (Off-Page Grounding)",
+            "impact": "Sedang",
+            "impact_color": "#F59E0B",
+            "explanation": (
+                f"AI melakukan validasi silang data di internet. Jika nama {b_name} hanya muncul di situs sendiri tanpa "
+                f"ulasan Google Business Profile atau direktori lokal {loc}, skor kepercayaan AI akan menurun."
+            ),
+            "solution": f"Lengkapi Google Business Profile di {loc}, minta 15+ ulasan autentik, dan daftar ke kurasi bisnis lokal."
+        })
+
+    # 2. Klasifikasi Buyer Intent & Evaluasi Visibilitas
+    prob_score = sampling_audit.get("probability_score", 0.0) if sampling_audit else (
+        80.0 if norm_answers.get("ai_high_intent_visibility") else 20.0
+    )
+
+    high_intent_mentioned = prob_score >= 60.0
+    exploratory_mentioned = prob_score >= 40.0
+
+    intent_breakdown = {
+        "high_intent": {
+            "type": "Non-Branded High-Intent (Siap Beli)",
+            "query_example": f"Rekomendasikan {cat} terbaik asli dari {loc} yang berkualitas tinggi dan siap dipesan sekarang.",
+            "intent_description": "Calon pembeli berdaya beli aktif yang berada di tahap akhir pertimbangan transaksi.",
+            "is_mentioned": high_intent_mentioned,
+            "status_label": "🟢 Direkomendasikan AI (Terkonversi)" if high_intent_mentioned else "🔴 Diabaikan AI (Peluang Lepas)",
+            "has_lost_revenue": not high_intent_mentioned,
+            "alert_title": "⚠️ POTENTIAL LOST REVENUE ALERT" if not high_intent_mentioned else "✅ Revenue Opportunity Secured",
+            "alert_description": (
+                f"Calon pembeli siap beli yang menanyakan {cat} di {loc} dialihkan AI ke kompetitor ({main_comp}). "
+                f"Terjadi potensi kebocoran transaksi langsung bagi {b_name}!"
+                if not high_intent_mentioned else
+                f"Merek {b_name} berhasil masuk dalam daftar rekomendasi transaksi AI pada kueri komersial tinggi."
+            )
+        },
+        "exploratory": {
+            "type": "Exploratory & Problem-Solving (Pencarian Solusi)",
+            "query_example": f"Apa solusi {cat} yang paling efisien, berkualitas, dan terpercaya untuk kebutuhan jangka panjang?",
+            "intent_description": "Pengguna yang membandingkan alternatif solusi di puncak funnel (top-of-funnel).",
+            "is_mentioned": exploratory_mentioned,
+            "status_label": "🟢 Muncul dalam Komparasi" if exploratory_mentioned else "🔴 Belum Masuk Komparasi",
+            "has_lost_revenue": False
+        }
+    }
+
+    # 3. Tiga Langkah Aksi Prioritas (Action Steps)
+    priority_action_steps = [
+        {
+            "priority": "1. Quick Win",
+            "timeframe": "< 1 Hari",
+            "badge_color": "#10B981",
+            "title": "Salin Schema JSON-LD & Terapkan Format BLUF",
+            "description": (
+                "Buka tab Auto-Fix Generator. Salin kode Schema LocalBusiness dan Product serta draf BLUF, "
+                "lalu tempelkan pada tag <head> dan baris pertama halaman utama website Anda."
+            ),
+            "expected_impact": "Mencegah kesalahan halusinasi harga dan membuat AI membaca entitas bisnis secara instan."
+        },
+        {
+            "priority": "2. Medium-Term",
+            "timeframe": "1 - 2 Minggu",
+            "badge_color": "#3B82F6",
+            "title": "Terbitkan Berkas /llms.txt & Conversational FAQ",
+            "description": (
+                f"Buat berkas /llms.txt di root domain Anda dan tambahkan 5 Tanya-Jawab percakapan yang membahas "
+                f"spesifikasi {prod}, transparansi harga, dan cara pemesanan."
+            ),
+            "expected_impact": "Meningkatkan vector similarity saat pengguna bertanya dalam bahasa alami ke ChatGPT/Perplexity."
+        },
+        {
+            "priority": "3. Strategic / Digital PR",
+            "timeframe": "2 - 4 Minggu",
+            "badge_color": "#8B5CF6",
+            "title": "Bangun Grounding Konsensus Eksternal & GBP",
+            "description": (
+                f"Verifikasi Google Business Profile di {loc}, minta ulasan berkala berfoto dari pelanggan, "
+                f"dan jalin publikasi kurasi listicle ulasan dengan media atau komunitas daerah."
+            ),
+            "expected_impact": "Memperkuat skor grounding multi-sumber sehingga AI merekomendasikan brand Anda di atas kompetitor."
+        }
+    ]
+
+    return {
+        "brand_name": b_name,
+        "category": cat,
+        "main_competitor": main_comp,
+        "specific_weaknesses": specific_weaknesses,
+        "intent_breakdown": intent_breakdown,
+        "priority_action_steps": priority_action_steps,
+        "has_lost_revenue_alert": intent_breakdown["high_intent"]["has_lost_revenue"]
+    }
+
+
 def analyze_citation_gaps(answers: Dict[str, bool]) -> List[Dict[str, str]]:
     """
-    Menganalisis Kesenjangan Kutipan (Citation Gap Analysis)
-    berdasarkan indikator-indikator yang belum tercentang.
+    Menganalisis kesenjangan sitasi (Citation Gap Analysis)
+    berdasarkan 3 Pilar GEO.
     """
+    norm = normalize_answers(answers)
     gaps = []
 
-    # Cek robots.txt
-    if not answers.get("tech_robots", False):
+    if not norm.get("schema_org", False):
         gaps.append({
-            "pilar": "Aksesibilitas Teknis",
-            "gap_title": "Bot AI Diblokir / Belum Diizinkan Secara Eksplisit",
+            "pilar": "Crawlability & Machine-Readability",
+            "gap_title": "Ketiadaan Schema.org JSON-LD Terstruktur",
             "impact": "Tinggi (Kritis)",
             "impact_color": "#EF4444",
-            "explanation": (
-                "Tanpa izin eksplisit di robots.txt, bot seperti GPTBot (OpenAI) dan ClaudeBot (Anthropic) "
-                "tidak akan membaca konten landing page Anda saat menyusun jawaban RAG secara real-time."
-            ),
-            "fix_summary": "Gunakan Auto-Fix Generator untuk membuat konfigurasi robots.txt yang membuka akses bot AI terpercaya."
+            "explanation": "Mesin AI tidak memiliki data entitas pasti terkait nama produk, harga, dan NAP bisnis Anda.",
+            "fix_summary": "Pasang kode Schema LocalBusiness & Product dari Auto-Fix Generator ke tag <head>."
         })
 
-    # Cek BLUF
-    if not answers.get("content_bluf", False):
+    if not norm.get("tech_robots_llmstxt", False):
         gaps.append({
-            "pilar": "Struktur Konten",
-            "gap_title": "Ketiadaan Format BLUF (Bottom Line Up Front)",
+            "pilar": "Crawlability & Machine-Readability",
+            "gap_title": "Akses Bot AI Belum Terbuka / Ketiadaan llms.txt",
             "impact": "Tinggi",
             "impact_color": "#EF4444",
-            "explanation": (
-                "AI RAG membagi halaman ke dalam potongan teks (chunks). Jika proposisi nilai, harga, dan keunggulan "
-                "tersimpan di bagian bawah halaman, chunk atas web Anda dianggap tidak relevan oleh sistem semantic search."
-            ),
-            "fix_summary": "Pindahkan ringkasan spesifikasi, harga, dan keunggulan ke 50 kata pertama di halaman produk."
+            "explanation": "Bot crawler AI (GPTBot, ClaudeBot, Perplexity) tidak diizinkan atau tidak menemukan ringkasan llms.txt.",
+            "fix_summary": "Perbarui robots.txt dan pasang berkas /llms.txt di root domain."
         })
 
-    # Cek Data Kuantitatif
-    if not answers.get("content_data", False):
+    if not norm.get("content_metadata_og", False):
         gaps.append({
-            "pilar": "Struktur Konten",
-            "gap_title": "Minimnya Data Spesifik & Angka Kuantitatif",
+            "pilar": "Crawlability & Machine-Readability",
+            "gap_title": "Ketiadaan Open Graph & Ringkasan BLUF Teratas",
             "impact": "Sedang - Tinggi",
             "impact_color": "#F59E0B",
-            "explanation": (
-                "Mesin AI sangat menyukai fakta konkret (harga pasti dalam Rupiah, dimensi produk, persentase bahan, masa garansi). "
-                "Klaim umum tanpa angka (seperti 'produk terbaik dan terjangkau') diabaikan oleh AI karena dianggap 'fluff'."
-            ),
-            "fix_summary": "Sertakan angka transparan: harga, berat, sertifikasi BPOM/Halal, atau data uji kepuasan pembeli."
+            "explanation": "Chunk awal web tidak memuat ringkasan harga dan keunggulan produk sehingga dilewati dalam RAG.",
+            "fix_summary": "Terapkan format BLUF di 50 kata teratas dan pasang Open Graph meta tags."
         })
 
-    # Cek FAQ Percakapan
-    if not answers.get("content_faq", False):
+    if not norm.get("ai_high_intent_visibility", False):
         gaps.append({
-            "pilar": "Struktur Konten",
-            "gap_title": "Ketiadaan FAQ Percakapan (Conversational Q&A)",
+            "pilar": "Share of Model (AI Visibility)",
+            "gap_title": "Merek Absen pada Kueri Siap Beli (Potential Lost Revenue)",
+            "impact": "Tinggi (Finansial)",
+            "impact_color": "#EF4444",
+            "explanation": "Calon pembeli berdaya beli tinggi yang bertanya rekomendasi ke AI saat ini dialihkan ke kompetitor.",
+            "fix_summary": "Perkuat optimasi FAQ percakapan transaksional dan cantumkan harga transparan."
+        })
+
+    if not norm.get("citation_official_domain", False):
+        gaps.append({
+            "pilar": "Grounding & Citations",
+            "gap_title": "Rasio Sitasi Tautan Domain Resmi Rendah",
             "impact": "Sedang",
             "impact_color": "#F59E0B",
-            "explanation": (
-                "Pengguna menanyakan pertanyaan ke AI dalam bahasa percakapan alami. "
-                "Halaman web yang tidak memiliki format Tanya-Jawab langsung akan sulit dipadankan (low vector similarity) dengan query pengguna."
-            ),
-            "fix_summary": "Buat 5 pertanyaan FAQ spesifik seputar cara pesan, pengiriman, dan perbandingan produk."
+            "explanation": "AI tidak mencantumkan URL website resmi sebagai rujukan, sehingga konversi klik langsung minim.",
+            "fix_summary": "Perbaiki canonical tags dan perkuat konsistensi penulisan domain di seluruh kanal digital."
         })
 
-    # Cek Schema JSON-LD
-    if not answers.get("schema_org", False) or not answers.get("schema_product_faq", False):
+    if not norm.get("citation_multi_source", False):
         gaps.append({
-            "pilar": "Data Terstruktur",
-            "gap_title": "Ketiadaan Schema JSON-LD (Mesin Buta Konteks Bisnis)",
-            "impact": "Tinggi",
-            "impact_color": "#EF4444",
-            "explanation": (
-                "Tanpa Schema.org markup, AI harus 'menebak' apakah teks di web Anda adalah nama produk, "
-                "nama pemilik, atau alamat toko. Schema JSON-LD memberikan sertifikasi metadata mesin 100% akurat."
-            ),
-            "fix_summary": "Salin kode Schema JSON-LD dari Auto-Fix Generator ke tag <head> website Anda."
-        })
-
-    # Cek Off-Page YouTube
-    if not answers.get("offpage_youtube", False):
-        gaps.append({
-            "pilar": "Otoritas Merek",
-            "gap_title": "Absennya Jejak Multimodal di YouTube",
-            "impact": "Sedang",
+            "pilar": "Grounding & Citations",
+            "gap_title": "Minimnya Jejak Otoritas Luar (Triangulasi Konsensus Lemah)",
+            "impact": "Sedang - Tinggi",
             "impact_color": "#F59E0B",
-            "explanation": (
-                "Google Gemini dan Google AI Overviews secara masif mengindeks transkrip video YouTube. "
-                "Tanpa video demonstrasi atau review produk, merek Anda kehilangan saluran sitasi multimodal terbesar di Indonesia."
-            ),
-            "fix_summary": "Publikasikan 1 video unboxing/review produk di YouTube dengan transkrip subtitle otomatis dan deskripsi lengkap."
-        })
-
-    # Cek Off-Page Sebutan Luar
-    if not answers.get("offpage_mentions", False):
-        gaps.append({
-            "pilar": "Otoritas Merek",
-            "gap_title": "Rendahnya Konsensus Pihak Ketiga (Third-Party Mentions)",
-            "impact": "Tinggi",
-            "impact_color": "#EF4444",
-            "explanation": (
-                "AI RAG memeriksa apakah merek Anda disebut di tempat lain untuk menghindari mempromosikan entitas fiktif. "
-                "Ketiadaan ulasan di Google Business Profile atau forum komunitas membuat skor kepercayaan (trust score) rendah."
-            ),
-            "fix_summary": "Optimalkan profil Google Bisnisku, kumpulkan 15+ ulasan autentik, dan daftar ke direktori UMKM lokal terpercaya."
+            "explanation": "Ketiadaan ulasan pihak ketiga membuat AI ragu terhadap kredibilitas dan keaslian bisnis.",
+            "fix_summary": "Lengkapi profil Google Business, kumpulkan ulasan berfoto, dan daftarkan situs ke direktori daerah."
         })
 
     return gaps
@@ -324,76 +458,51 @@ def analyze_citation_gaps(answers: Dict[str, bool]) -> List[Dict[str, str]]:
 
 def get_prioritized_recommendations(answers: Dict[str, bool]) -> Dict[str, List[Dict[str, str]]]:
     """
-    Menyusun rekomendasi perbaikan berbasis jawaban user,
+    Menyusun rekomendasi perbaikan berbasis 3 Pilar GEO,
     dibagi menjadi Quick Wins (< 1 hari) dan Strategic Improvements (1-4 minggu).
     """
+    norm = normalize_answers(answers)
     quick_wins = []
     strategic = []
 
-    # Quick Wins
-    if not answers.get("tech_robots", False):
+    if not norm.get("schema_org", False):
         quick_wins.append({
-            "title": "Buka Akses Bot AI di robots.txt",
-            "pilar": "Teknis",
-            "effort": "15 Menit",
-            "action": "Tambahkan User-agent: GPTBot, ClaudeBot, Google-Extended, PerplexityBot dengan aturan 'Allow: /' di file robots.txt Anda."
+            "title": "Pasang Schema JSON-LD LocalBusiness & Product",
+            "pilar": "Crawlability",
+            "effort": "20 Menit",
+            "action": "Salin kode JSON-LD dari tab Auto-Fix Generator ke tag <head> halaman utama website Anda."
         })
 
-    if not answers.get("content_bluf", False):
+    if not norm.get("content_metadata_og", False):
         quick_wins.append({
-            "title": "Terapkan Paragraf BLUF di Bagian Paling Atas",
-            "pilar": "Konten",
+            "title": "Terapkan Paragraf BLUF di 50 Kata Teratas",
+            "pilar": "Machine-Readability",
             "effort": "30 Menit",
-            "action": "Ganti paragraf pembuka landing page Anda dengan draf BLUF dari Auto-Fix Generator kami yang langsung menyebutkan nama merek, fungsi utama, keunggulan pembeda, dan harga."
+            "action": "Letakkan ringkasan spesifikasi, harga, dan keunggulan pembeda di baris pertama halaman produk."
         })
 
-    if not answers.get("schema_org", False) or not answers.get("schema_product_faq", False):
+    if not norm.get("tech_robots_llmstxt", False):
         quick_wins.append({
-            "title": "Pasang Kode Schema JSON-LD",
-            "pilar": "Data Terstruktur",
-            "effort": "30 Menit",
-            "action": "Buka tab Auto-Fix Generator, salin kode JSON-LD Organization dan FAQ, lalu tempelkan ke bagian header tema website / landing page Anda."
+            "title": "Terbitkan robots.txt Terbuka & Berkas llms.txt",
+            "pilar": "Crawlability",
+            "effort": "20 Menit",
+            "action": "Unggah berkas /llms.txt dan izinkan User-agent GPTBot, ClaudeBot, serta PerplexityBot."
         })
 
-    if not answers.get("content_data", False):
-        quick_wins.append({
-            "title": "Tambahkan Angka Kuantitatif & Spesifikasi Jelas",
-            "pilar": "Konten",
-            "effort": "45 Menit",
-            "action": "Lengkapi deskripsi produk dengan angka pasti: harga Rupiah transparan, berat gramasi, dimensi cm, lama ketahanan, dan nomor registrasi P-IRT/BPOM/Halal."
-        })
-
-    # Strategic Improvements
-    if not answers.get("content_headings", False):
+    if not norm.get("ai_high_intent_visibility", False):
         strategic.append({
-            "title": "Restrukturisasi Hierarki Heading Semantik (H1-H3)",
-            "pilar": "Konten",
+            "title": "Optimasi Conversational FAQ untuk Kueri Siap Beli",
+            "pilar": "AI Visibility",
             "effort": "1-2 Hari",
-            "action": "Pastikan setiap halaman hanya memiliki satu H1 (topik utama), diikuti H2 untuk sub-topik (Spesifikasi, Cara Pakai, FAQ), dan H3 untuk detail pemecahan."
+            "action": "Tambahkan Tanya-Jawab alami yang menjawab keraguan harga, legalitas garansi, dan pengiriman."
         })
 
-    if not answers.get("tech_https_speed", False):
+    if not norm.get("citation_multi_source", False):
         strategic.append({
-            "title": "Optimasi Kecepatan Muat Web (< 3 Detik) & Pasang SSL",
-            "pilar": "Teknis",
-            "effort": "1-3 Hari",
-            "action": "Kompresi seluruh gambar ke format WebP, aktifkan caching CDN (misal Cloudflare), dan pastikan sertifikat SSL selalu aktif."
-        })
-
-    if not answers.get("offpage_youtube", False):
-        strategic.append({
-            "title": "Bangun Aset Video YouTube Ber-Transkrip",
-            "pilar": "Otoritas",
-            "effort": "1-2 Minggu",
-            "action": "Buat 2-3 video demonstrasi penggunaan atau ulasan produk UMKM Anda, aktifkan auto-caption / subtitle bahasa Indonesia, dan tautkan ke website."
-        })
-
-    if not answers.get("offpage_mentions", False):
-        strategic.append({
-            "title": "Perkuat Jejak Otoritas Digital Luar (Google Business & Listicles)",
-            "pilar": "Otoritas",
-            "effort": "2-4 Minggu",
-            "action": "Lengkapi Google Business Profile, dorong pelanggan setia memberikan review berfoto, dan jalin kolaborasi review dengan blog lokal atau portal berita daerah."
+            "title": "Bangun Jejak Konsensus Multi-Platform & Google Business Profile",
+            "pilar": "Grounding",
+            "effort": "2-3 Minggu",
+            "action": "Lengkapi Google Business Profile lokal, kumpulkan 15+ review asli, dan jalin kurasi media lokal."
         })
 
     return {
@@ -405,7 +514,7 @@ def get_prioritized_recommendations(answers: Dict[str, bool]) -> Dict[str, List[
 def analyze_inputs_to_indicators(inputs: Dict[str, str]) -> Dict[str, Any]:
     """
     Menganalisis profil data inputan UMKM secara cerdas untuk memetakan
-    kesiapan 10 indikator GEO, skor otomatis, dan diagnosa relevansi AI.
+    kesiapan 3 pilar GEO secara otomatis.
     """
     brand = inputs.get("brand_name", "").strip()
     url = inputs.get("website_url", "").strip()
@@ -420,110 +529,83 @@ def analyze_inputs_to_indicators(inputs: Dict[str, str]) -> Dict[str, Any]:
     reasons = {}
     detected_data = []
 
-    # 1. tech_robots: Kebanyakan website UMKM belum memiliki robots.txt khusus bot AI
-    if "robots.txt" in adv.lower() or "ai crawler" in adv.lower():
-        answers["tech_robots"] = True
-        reasons["tech_robots"] = "Dikonfirmasi mengizinkan crawler AI pada konfigurasi web."
-    else:
-        answers["tech_robots"] = False
-        reasons["tech_robots"] = f"Domain {url or 'website'} terdeteksi, namun crawler AI (GPTBot, ClaudeBot) membutuhkan deklarasi izin eksplisit pada file robots.txt."
+    combined_text = f"{brand} {product} {category} {adv} {location}".lower()
 
-    # 2. tech_https_speed: Cek protokol HTTPS
-    if url.lower().startswith("https://"):
-        answers["tech_https_speed"] = True
-        reasons["tech_https_speed"] = "Protokol HTTPS aktif dan aman untuk perayapan AI real-time."
-    else:
-        answers["tech_https_speed"] = False
-        reasons["tech_https_speed"] = "URL belum menggunakan protokol aman HTTPS atau format URL belum lengkap."
-
-    # 3. content_bluf: Cek apakah produk dan keunggulan padat informasi
-    combined_content = f"{product} {adv}".lower()
-    if len(product) >= 15 and len(adv) >= 20 and len(price) >= 3:
-        answers["content_bluf"] = True
-        reasons["content_bluf"] = f"Input produk dan keunggulan ({brand}) telah memuat proposisi nilai dan harga yang siap dijadikan format BLUF."
-    else:
-        answers["content_bluf"] = False
-        reasons["content_bluf"] = "Informasi produk atau keunggulan masih singkat, belum memenuhi standar ringkasan 50 kata teratas (BLUF)."
-
-    # 4. content_headings: Kategori dan produk jelas terdefinisi
-    if len(category) > 0 and len(product) >= 8:
-        answers["content_headings"] = True
-        reasons["content_headings"] = f"Hierarki semantik terdefinisi baik antara kategori ({category}) dan entitas produk ({product})."
-    else:
-        answers["content_headings"] = False
-        reasons["content_headings"] = "Struktur kategori atau penamaan produk belum cukup spesifik untuk pembagian heading H1-H3."
-
-    # 5. content_faq: Cek adanya pola tanya jawab atau kendala pembeli
-    faq_keywords = ["garansi", "kirim", "ongkir", "halal", "bpom", "asli", "pembayaran", "pesan", "faq", "tanya"]
-    has_faq_context = any(kw in combined_content for kw in faq_keywords)
-    if has_faq_context and ("?" in adv or "garansi" in combined_content or "kirim" in combined_content):
-        answers["content_faq"] = True
-        reasons["content_faq"] = "Terdeteksi informasi FAQ/kendala pembeli (garansi, pengiriman, keaslian)."
-    else:
-        answers["content_faq"] = False
-        reasons["content_faq"] = "Belum terdeteksi bagian FAQ percakapan alami yang menjawab keraguan spesifik calon konsumen."
-
-    # 6. content_data: Cek data kuantitatif (angka, harga, gramasi, sertifikasi)
-    has_digits = any(char.isdigit() for char in f"{price} {adv}")
-    has_units = any(u in combined_content for u in ["rp", "idr", "ribu", "k", "gram", "gr", "kg", "ml", "liter", "%", "organik", "halal", "bpom", "p-irt", "score", "84", "90"])
-    if has_digits and has_units:
-        answers["content_data"] = True
-        reasons["content_data"] = f"Data kuantitatif kuat terdeteksi (harga: {price}, detail spesifik: {adv[:35]}...)."
-        detected_data.append("Harga & Angka Kuantitatif")
-    else:
-        answers["content_data"] = False
-        reasons["content_data"] = "Masih minim angka kuantitatif (harga pasti, dimensi, atau nomor sertifikasi)."
-
-    # 7. schema_org: Kelengkapan NAP (Name, Address, Phone)
-    has_nap = len(brand) >= 3 and len(location) >= 4 and any(c.isdigit() for c in phone)
+    # 1. schema_org
+    has_nap = len(brand) >= 2 and len(location) >= 3 and any(c.isdigit() for c in phone)
     if has_nap and ("schema" in adv.lower() or "json-ld" in adv.lower()):
         answers["schema_org"] = True
-        reasons["schema_org"] = "Entitas NAP dan kode Schema terdeteksi terpasang."
+        reasons["schema_org"] = "Entitas NAP dan deklarasi Schema terdeteksi."
     else:
         answers["schema_org"] = False
-        reasons["schema_org"] = f"Data NAP ({brand}, {location}, WhatsApp) lengkap di input, namun kode Schema JSON-LD perlu disalin ke tag <head> situs."
+        reasons["schema_org"] = "Data NAP lengkap di input, namun kode Schema JSON-LD perlu disalin ke tag <head> situs."
 
-    # 8. schema_product_faq: Cek data produk & harga
-    if len(product) >= 10 and len(price) >= 5 and ("product" in adv.lower() or "katalog" in adv.lower()):
-        answers["schema_product_faq"] = True
-        reasons["schema_product_faq"] = "Product schema terpasang pada katalog utama."
+    # 2. content_metadata_og
+    if len(product) >= 8 and len(adv) >= 15 and len(price) >= 3:
+        answers["content_metadata_og"] = True
+        reasons["content_metadata_og"] = f"Input produk ({product}) dan keunggulan memenuhi kriteria draf BLUF & Open Graph."
+        detected_data.append("Proposisi Nilai BLUF Siap Pasang")
     else:
-        answers["schema_product_faq"] = False
-        reasons["schema_product_faq"] = "Data item produk dan harga terdeteksi, siap diproduksi menjadi Product Schema via Auto-Fix Generator."
+        answers["content_metadata_og"] = False
+        reasons["content_metadata_og"] = "Informasi produk atau keunggulan masih singkat untuk pembentukan BLUF komprehensif."
 
-    # 9. offpage_youtube: Cek channel video / ulasan YouTube
-    if "youtube" in adv.lower() or "video" in adv.lower() or "tiktok" in adv.lower() or "transkrip" in adv.lower():
-        answers["offpage_youtube"] = True
-        reasons["offpage_youtube"] = "Aset video demonstrasi/ulasan produk terdeteksi."
+    # 3. tech_robots_llmstxt
+    if "robots.txt" in adv.lower() or "llms.txt" in adv.lower():
+        answers["tech_robots_llmstxt"] = True
+        reasons["tech_robots_llmstxt"] = "Dikonfirmasi mengizinkan crawler AI pada konfigurasi web."
     else:
-        answers["offpage_youtube"] = False
-        reasons["offpage_youtube"] = "Belum terdeteksi adanya video demonstrasi produk di YouTube ber-transkrip."
+        answers["tech_robots_llmstxt"] = False
+        reasons["tech_robots_llmstxt"] = "Crawler AI membutuhkan deklarasi izin eksplisit di robots.txt dan ringkasan di llms.txt."
 
-    # 10. offpage_mentions: Cek potensi sebutan luar berdasarkan lokasi & entitas
-    if len(location) >= 4 and len(brand.split()) >= 2:
-        answers["offpage_mentions"] = True
-        reasons["offpage_mentions"] = f"Entitas merek '{brand}' dengan basis lokal '{location}' memiliki potensi grounding tinggi di Google Maps & direktori bisnis."
+    # 4. ai_high_intent_visibility
+    has_price_digits = any(char.isdigit() for char in price)
+    if has_price_digits and len(product) >= 5:
+        answers["ai_high_intent_visibility"] = True
+        reasons["ai_high_intent_visibility"] = f"Produk ({product}) memiliki harga transparan ({price}), siap dikonversi pada kueri siap beli."
+        detected_data.append("Data Transaksi & Harga")
     else:
-        answers["offpage_mentions"] = False
-        reasons["offpage_mentions"] = "Nama merek atau informasi lokasi masih terlalu umum untuk triangulasi konsensus luar."
+        answers["ai_high_intent_visibility"] = False
+        reasons["ai_high_intent_visibility"] = "Harga atau spesifikasi produk belum transparan untuk kueri siap beli."
+
+    # 5. ai_exploratory_visibility
+    if len(adv) >= 20 and len(category) >= 3:
+        answers["ai_exploratory_visibility"] = True
+        reasons["ai_exploratory_visibility"] = "Keunggulan pembeda cukup kuat untuk kueri eksplorasi dan perbandingan."
+    else:
+        answers["ai_exploratory_visibility"] = False
+        reasons["ai_exploratory_visibility"] = "Perlu memperkuat narasi pembeda unik dibanding kompetitor sejenis."
+
+    # 6. citation_official_domain
+    if url.lower().startswith("https://"):
+        answers["citation_official_domain"] = True
+        reasons["citation_official_domain"] = "Domain resmi menggunakan protokol HTTPS yang aman untuk sitasi rujukan AI."
+    else:
+        answers["citation_official_domain"] = False
+        reasons["citation_official_domain"] = "URL resmi belum menggunakan HTTPS atau format URL belum lengkap."
+
+    # 7. citation_multi_source
+    if len(location) >= 4 and len(brand.split()) >= 1:
+        answers["citation_multi_source"] = True
+        reasons["citation_multi_source"] = f"Entitas merek '{brand}' di {location} siap digrounding ke Google Business & direktori lokal."
+    else:
+        answers["citation_multi_source"] = False
+        reasons["citation_multi_source"] = "Nama merek atau informasi domisili masih terlalu umum untuk triangulasi konsensus luar."
 
     return {
         "answers": answers,
         "reasons": reasons,
         "detected_data": detected_data,
-        "summary": f"Analisis otomatis inputan untuk '{brand}' ({category}): {sum(1 for v in answers.values() if v)} dari 10 indikator kesiapan GEO telah terpetakan."
+        "summary": f"Analisis otomatis untuk '{brand}' ({category}): Kesiapan 3 Pilar GEO terpetakan."
     }
 
 
 def live_crawl_website(target_url: str, timeout: float = 6.0) -> Dict[str, Any]:
     """
-    Melakukan Live Crawling & Audit Web secara langsung ke domain yang diinput pengguna:
-    1. Memvalidasi koneksi HTTPS dan mengukur waktu respons awal (TTFB / response time).
-       Jika menggunakan HTTPS dan response time < 3 detik -> tech_https_speed_passed = True.
-    2. Mengambil dan menganalisis file /robots.txt situs tersebut menggunakan urllib.robotparser
-       dan parser blok direktif untuk mendeteksi apakah GPTBot, ClaudeBot, Google-Extended,
-       dan PerplexityBot diizinkan. Jika diizinkan -> tech_robots_passed = True.
-    3. Memindai potongan HTML awal untuk mendeteksi Schema JSON-LD dan heading semantik.
+    Melakukan Live Crawling & Audit Web secara langsung:
+    1. Validasi HTTPS & waktu respons (TTFB).
+    2. Unduh dan analisis /robots.txt untuk izin bot AI (GPTBot, ClaudeBot, PerplexityBot, Google-Extended).
+    3. Cek keberadaan berkas /llms.txt pada root server.
+    4. Pindai tag Open Graph (og:title, og:description, og:image) dan Schema JSON-LD dari HTML live.
     """
     logs = []
     cleaned_url = target_url.strip()
@@ -533,10 +615,11 @@ def live_crawl_website(target_url: str, timeout: float = 6.0) -> Dict[str, Any]:
             "error_message": "URL website belum diisi.",
             "tech_robots_passed": False,
             "tech_https_speed_passed": False,
+            "has_llms_txt": False,
+            "has_open_graph": False,
             "logs": ["Error: URL kosong."]
         }
 
-    # Normalisasi Skema URL
     if not cleaned_url.startswith(("http://", "https://")):
         cleaned_url = "https://" + cleaned_url
 
@@ -544,20 +627,17 @@ def live_crawl_website(target_url: str, timeout: float = 6.0) -> Dict[str, Any]:
     scheme = parsed.scheme.lower()
     netloc = parsed.netloc or parsed.path.split("/")[0]
     base_origin = f"{scheme}://{netloc}"
-    
+
     logs.append(f"🌐 Memulai Live Audit Web ke: {cleaned_url}")
     logs.append(f"🔍 Domain terdeteksi: {netloc} (Protokol: {scheme.upper()})")
 
-    # Header User-Agent Audit
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 (compatible; GEOAuditNusantara/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; GEOAuditNusantara/2.0; +https://geoaudit.id)",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
     }
 
-    # --------------------------------------------------------------------------
-    # 1. TES KONEKSI HTTPS & WAKTU RESPON (TTFB)
-    # --------------------------------------------------------------------------
+    # 1. TES HTTPS & WAKTU RESPON
     https_active = (scheme == "https")
     response_time_sec = 0.0
     status_code = 0
@@ -565,14 +645,13 @@ def live_crawl_website(target_url: str, timeout: float = 6.0) -> Dict[str, Any]:
     html_sample = ""
 
     ctx = ssl.create_default_context()
-    
     t_start = time.perf_counter()
+
     try:
         req = urllib.request.Request(cleaned_url, headers=headers)
         with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
             response_time_sec = time.perf_counter() - t_start
             status_code = resp.getcode()
-            # Baca sebagian kecil HTML untuk analisis tambahan
             html_bytes = resp.read(120000)
             html_sample = html_bytes.decode("utf-8", errors="ignore")
     except urllib.error.HTTPError as he:
@@ -582,13 +661,13 @@ def live_crawl_website(target_url: str, timeout: float = 6.0) -> Dict[str, Any]:
     except ssl.SSLError as se:
         response_time_sec = time.perf_counter() - t_start
         ssl_verified = False
-        logs.append(f"⚠️ Peringatan SSL: Sertifikat tidak dapat divalidasi ({se}). Mencoba koneksi sekunder...")
-        # Coba unverified context untuk tetap mengukur respon
+        logs.append(f"⚠️ Peringatan SSL: Sertifikat tidak valid ({se}). Mencoba koneksi sekunder...")
         try:
             unverified_ctx = ssl._create_unverified_context()
             req = urllib.request.Request(cleaned_url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout, context=unverified_ctx) as resp:
                 status_code = resp.getcode()
+                html_sample = resp.read(60000).decode("utf-8", errors="ignore")
         except Exception:
             pass
     except Exception as e:
@@ -600,34 +679,24 @@ def live_crawl_website(target_url: str, timeout: float = 6.0) -> Dict[str, Any]:
             "url_tested": cleaned_url,
             "tech_robots_passed": False,
             "tech_https_speed_passed": False,
+            "has_llms_txt": False,
+            "has_open_graph": False,
             "logs": logs
         }
 
     response_time_sec = round(response_time_sec, 3)
     response_time_ms = int(response_time_sec * 1000)
     speed_under_3s = (response_time_sec < 3.0)
-
-    # Indikator 2 Lolos jika HTTPS aktif dan respon di bawah 3 detik
     tech_https_speed_passed = (https_active and speed_under_3s and ssl_verified)
 
     if tech_https_speed_passed:
-        logs.append(f"✅ Indikator 2 LOLOS: HTTPS aktif & Waktu respon sangat cepat ({response_time_sec} detik / {response_time_ms} ms)")
+        logs.append(f"✅ HTTPS & Kecepatan: Waktu respons prima ({response_time_sec}s / {response_time_ms} ms)")
     else:
-        alasan = []
-        if not https_active:
-            alasan.append("Protokol bukan HTTPS")
-        if not speed_under_3s:
-            alasan.append(f"Waktu respon lambat ({response_time_sec}s >= 3.0s)")
-        if not ssl_verified:
-            alasan.append("Sertifikat SSL bermasalah")
-        logs.append(f"⚠️ Indikator 2 BELUM LOLOS: {', '.join(alasan)}")
+        logs.append(f"⚠️ Kecepatan/Keamanan: Waktu respons {response_time_sec}s")
 
-    # --------------------------------------------------------------------------
-    # 2. TES CRAWL /robots.txt & IZIN BOT AI
-    # --------------------------------------------------------------------------
+    # 2. TES /robots.txt
     robots_url = urllib.parse.urljoin(base_origin, "/robots.txt")
     logs.append(f"🤖 Memeriksa file robots.txt di: {robots_url}")
-
     robots_status_code = 0
     robots_content = ""
     robots_found = False
@@ -638,129 +707,75 @@ def live_crawl_website(target_url: str, timeout: float = 6.0) -> Dict[str, Any]:
             robots_status_code = resp_rob.getcode()
             robots_content = resp_rob.read(60000).decode("utf-8", errors="ignore")
             robots_found = True
-            logs.append(f"📄 File robots.txt berhasil diunduh (Status: {robots_status_code} OK)")
+            logs.append(f"📄 robots.txt ditemukan (Status: {robots_status_code} OK)")
     except urllib.error.HTTPError as he_rob:
         robots_status_code = he_rob.code
         if robots_status_code == 404:
-            logs.append("ℹ️ File /robots.txt tidak ditemukan (404 Not Found). Berdasarkan standar RFC 9309, ketiadaan robots.txt berarti SELURUH BOT DIIZINKAN secara default.")
-        else:
-            logs.append(f"⚠️ Respon file robots.txt berstatus HTTP {robots_status_code}")
+            logs.append("ℹ️ robots.txt tidak ditemukan (404). Default RFC 9309: Seluruh bot diizinkan.")
     except Exception as e_rob:
-        logs.append(f"⚠️ Tidak dapat mengunduh robots.txt ({e_rob}). Diasumsikan default crawler policy.")
+        logs.append(f"⚠️ Peringatan robots.txt: {str(e_rob)}")
 
-    # Analisis izin untuk 4 Bot AI Utama
     target_ai_bots = ["GPTBot", "ClaudeBot", "Google-Extended", "PerplexityBot"]
     ai_bots_permissions = {}
-    
+    tech_robots_passed = True
+
     if not robots_found or robots_status_code == 404:
-        # Jika file tidak ada, semua bot diizinkan secara default
         for bot in target_ai_bots:
-            ai_bots_permissions[bot] = {
-                "allowed": True,
-                "reason": "Diizinkan (Tidak ada file robots.txt / 404 Not Found)",
-                "source": "Default Open"
-            }
-        tech_robots_passed = True
+            ai_bots_permissions[bot] = {"allowed": True, "reason": "Diizinkan secara default (404 Open)", "source": "RFC 9309"}
     else:
-        # Gunakan urllib.robotparser
-        rp = urllib.robotparser.RobotFileParser()
-        rp.parse(robots_content.splitlines())
-
-        # Parser eksplisit per-baris untuk memeriksa blok spesifik AI
-        lines = [line.split("#")[0].strip() for line in robots_content.splitlines() if line.strip()]
-        agent_rules = {}
-        current_agents = []
-        in_directives = False
-
-        for line in lines:
-            if ":" not in line:
-                continue
-            k, v = [x.strip() for x in line.split(":", 1)]
-            k_low = k.lower()
-            if k_low == "user-agent":
-                if in_directives:
-                    current_agents = []
-                    in_directives = False
-                agent_val = v.lower()
-                current_agents.append(agent_val)
-                if agent_val not in agent_rules:
-                    agent_rules[agent_val] = []
-            elif k_low in ("allow", "disallow"):
-                in_directives = True
-                for ag in current_agents:
-                    agent_rules[ag].append((k_low, v))
-
-        tech_robots_passed = True
-
+        # Pindai aturan Disallow untuk bot AI
+        rob_lower = robots_content.lower()
         for bot in target_ai_bots:
-            bot_low = bot.lower()
+            bot_tag = f"user-agent: {bot.lower()}"
             is_blocked = False
-            rule_detail = "Allow: /"
-            source_detail = ""
+            if bot_tag in rob_lower:
+                part = rob_lower.split(bot_tag)[1].split("user-agent:")[0]
+                if "disallow: /" in part and "allow: /" not in part:
+                    is_blocked = True
+            elif "user-agent: *" in rob_lower:
+                part = rob_lower.split("user-agent: *")[1].split("user-agent:")[0]
+                if "disallow: /" in part and "allow: /" not in part:
+                    is_blocked = True
 
-            # 1. Cek aturan spesifik bot terlebih dahulu
-            if bot_low in agent_rules and agent_rules[bot_low]:
-                source_detail = f"Aturan spesifik User-agent: {bot}"
-                for directive, path in agent_rules[bot_low]:
-                    if directive == "disallow" and path in ("/", "/*"):
-                        is_blocked = True
-                        rule_detail = "Disallow: / (Diblokir)"
-                    elif directive == "allow" and path in ("/", "/*"):
-                        is_blocked = False
-                        rule_detail = "Allow: / (Diizinkan)"
-            # 2. Cek aturan wildcard User-agent: *
-            elif "*" in agent_rules and agent_rules["*"]:
-                source_detail = "Mewarisi aturan umum User-agent: *"
-                for directive, path in agent_rules["*"]:
-                    if directive == "disallow" and path in ("/", "/*"):
-                        is_blocked = True
-                        rule_detail = "Disallow: / (Diblokir via *)"
-                    elif directive == "allow" and path in ("/", "/*"):
-                        is_blocked = False
-                        rule_detail = "Allow: / (Diizinkan via *)"
-            else:
-                source_detail = "Default (Tidak dibatasi)"
-                rule_detail = "Allow (Bebas Crawl)"
-
-            # Verifikasi silang dengan RobotFileParser untuk bot yang mendukung URL fetching
-            can_fetch_root = rp.can_fetch(bot, cleaned_url)
-            if not can_fetch_root and bot_low in agent_rules:
-                is_blocked = True
-                rule_detail = "Disallow (Ditolak oleh RobotFileParser)"
-
-            allowed = not is_blocked
             ai_bots_permissions[bot] = {
-                "allowed": allowed,
-                "reason": rule_detail,
-                "source": source_detail
+                "allowed": not is_blocked,
+                "reason": "Disallow: /" if is_blocked else "Allow: /",
+                "source": "robots.txt direktif"
             }
-
-            if not allowed:
+            if is_blocked:
                 tech_robots_passed = False
-                logs.append(f"⛔ {bot} DIBLOKIR: {rule_detail} ({source_detail})")
-            else:
-                logs.append(f"✅ {bot} DIIZINKAN: {rule_detail}")
 
-    if tech_robots_passed:
-        logs.append("✅ Indikator 1 LOLOS: Seluruh AI Crawlers (GPTBot, ClaudeBot, Google-Extended, PerplexityBot) diizinkan membaca situs.")
-    else:
-        logs.append("⚠️ Indikator 1 BELUM LOLOS: Ditemukan bot AI yang diblokir oleh robots.txt.")
+    # 3. TES KEBERADAAN /llms.txt
+    llms_url = urllib.parse.urljoin(base_origin, "/llms.txt")
+    has_llms_txt = False
+    llms_status_code = 0
+    try:
+        req_llm = urllib.request.Request(llms_url, headers=headers)
+        with urllib.request.urlopen(req_llm, timeout=timeout, context=ctx) as resp_llm:
+            llms_status_code = resp_llm.getcode()
+            if llms_status_code == 200:
+                has_llms_txt = True
+                logs.append(f"✅ Deteksi llms.txt: Ditemukan berkas standar /llms.txt aktif di {llms_url}!")
+    except Exception:
+        logs.append(f"ℹ️ Berkas /llms.txt belum terdeteksi (Gunakan Auto-Fix Generator untuk membuatnya).")
 
-    # --------------------------------------------------------------------------
-    # 3. PEMINDAIAN TAMBAHAN DARI HTML LANGSUNG
-    # --------------------------------------------------------------------------
+    # 4. PEMINDAIAN TAG HTML (OPEN GRAPH & SCHEMA JSON-LD)
     has_schema_jsonld = False
+    has_open_graph = False
     has_headings = False
     page_title = ""
 
     if html_sample:
         if '<script type="application/ld+json"' in html_sample or "<script type='application/ld+json'" in html_sample:
             has_schema_jsonld = True
-            logs.append("💡 Deteksi Live HTML: Ditemukan Schema JSON-LD (<script type='application/ld+json'>) aktif!")
+            logs.append("💡 Deteksi Live HTML: Ditemukan Schema.org JSON-LD aktif!")
+
+        if 'property="og:title"' in html_sample.lower() or 'property="og:description"' in html_sample.lower() or 'name="og:title"' in html_sample.lower():
+            has_open_graph = True
+            logs.append("💡 Deteksi Live HTML: Ditemukan Open Graph metadata tags (og:title / og:description)!")
 
         if re.search(r"<h[1-3][^>]*>", html_sample, re.IGNORECASE):
             has_headings = True
-            logs.append("💡 Deteksi Live HTML: Ditemukan struktur heading semantik (H1/H2/H3).")
 
         title_match = re.search(r"<title[^>]*>(.*?)</title>", html_sample, re.IGNORECASE | re.DOTALL)
         if title_match:
@@ -784,12 +799,13 @@ def live_crawl_website(target_url: str, timeout: float = 6.0) -> Dict[str, Any]:
         "robots_snippet": robots_content[:350] if robots_content else "",
         "ai_bots_permissions": ai_bots_permissions,
         "tech_robots_passed": tech_robots_passed,
+        "has_llms_txt": has_llms_txt,
+        "has_open_graph": has_open_graph,
         "html_inspections": {
             "page_title": page_title,
             "has_schema_jsonld": has_schema_jsonld,
+            "has_open_graph": has_open_graph,
             "has_headings": has_headings
         },
         "logs": logs
     }
-
-

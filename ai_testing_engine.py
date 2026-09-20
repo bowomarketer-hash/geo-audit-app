@@ -120,46 +120,123 @@ CITATION_CATEGORIES = {
 }
 
 
+def get_default_competitors_by_category(category: str, location: str = "") -> List[str]:
+    """
+    Menghasilkan daftar 4 kompetitor benchmark yang realistis dan relevan
+    berdasarkan kategori industri UMKM pengguna (bukan hardcoded kopi).
+    """
+    cat_lower = (category or "").lower()
+    loc_clean = (location.split(",")[0].strip() if "," in location else location.strip()) or "Nusantara"
+
+    if any(k in cat_lower for k in ["tani", "agri", "kebun", "bibit", "tanaman", "pupuk", "ternak", "pangan"]):
+        return [
+            f"TaniHub Mitra {loc_clean}",
+            "Nusantara Agri Flora",
+            "Agro Makmur Sejahtera",
+            "Sentra Tani Organik"
+        ]
+    elif any(k in cat_lower for k in ["kopi", "coffee"]):
+        return [
+            f"Kopi Kenangan {loc_clean}",
+            "Otten Coffee Nusantara",
+            "Anomali Coffee Roastery",
+            "Kapal Api Specialty"
+        ]
+    elif any(k in cat_lower for k in ["kuliner", "makanan", "minuman", "f&b", "resto", "snack", "roti"]):
+        return [
+            f"Rasa Nusantara Prima {loc_clean}",
+            "Dapur Selera Kita",
+            "Sedap Alam Nusantara",
+            "Berkah Kuliner Daerah"
+        ]
+    elif any(k in cat_lower for k in ["jasa", "layanan", "service", "konsultan", "teknisi", "bengkel", "laundry"]):
+        return [
+            f"Solusi Mitra Cendekia {loc_clean}",
+            "Layanan Prima Nusantara",
+            "Karya Konsultan Mandiri",
+            "Cakra Service Hub"
+        ]
+    elif any(k in cat_lower for k in ["fashion", "baju", "pakaian", "kriya", "kerajinan", "batik", "tenun"]):
+        return [
+            f"Kriya Wastra Nusantara {loc_clean}",
+            "Gaya Kreasi Mandiri",
+            "Lestari Etnik Studio",
+            "Tenun Jelita Indonesia"
+        ]
+    elif any(k in cat_lower for k in ["sehat", "herbal", "obat", "klinik", "jamu", "farmasi", "madu"]):
+        return [
+            f"Herba Nusantara Sehat {loc_clean}",
+            "Alami Bio Nutrisi",
+            "Husada Sejahtera Farm",
+            "Rimpang Mandiri Farma"
+        ]
+    elif any(k in cat_lower for k in ["teknologi", "software", "it", "digital", "gadget", "komputer"]):
+        return [
+            f"TechNusa Digital {loc_clean}",
+            "Solusi Inovasi Siber",
+            "Informatika Karya Nusantara",
+            "Komersia Cloud Hub"
+        ]
+    else:
+        cat_clean = category.strip() or "Produk Unggulan"
+        return [
+            f"Sentra {cat_clean} {loc_clean}",
+            f"Pusat {cat_clean} Nasional",
+            f"Mitra {cat_clean} Terpercaya",
+            f"Grosir {cat_clean} Nusantara"
+        ]
+
+
 def build_benchmark_queries(brand_name: str, product_name: str, category: str, location: str) -> List[Dict[str, str]]:
     """
-    Menghasilkan 5 kueri pencarian percakapan benchmark yang merefleksikan
+    Menghasilkan 5 kueri pencarian percakapan benchmark dinamis yang merefleksikan
     kebiasaan nyata calon pembeli saat bertanya ke mesin AI RAG.
     """
     b_name = brand_name.strip() or "Merek Anda"
-    p_name = product_name.strip() or "Produk Unggulan"
-    cat = category.strip() or "Produk Lokal"
+    p_name = product_name.strip() or f"Produk Unggulan {b_name}"
+    cat = category.strip() or "Produk & Layanan"
     loc = location.split(",")[0].strip() if "," in location else (location.strip() or "Nusantara")
+
+    cat_low = cat.lower()
+    if any(k in cat_low for k in ["tani", "agri", "tanaman", "kebun"]):
+        pain_point_query = f"Saya mencari {cat} yang ramah lingkungan, organik, dan bersertifikasi mutu dari produsen terpercaya di {loc}. Adakah rekomendasi?"
+    elif any(k in cat_low for k in ["kuliner", "makanan", "minuman", "f&b"]):
+        pain_point_query = f"Saya mencari {cat} yang higienis, autentik, dan telah tersertifikasi Halal/BPOM resmi di {loc}. Adakah rekomendasi?"
+    elif any(k in cat_low for k in ["jasa", "layanan"]):
+        pain_point_query = f"Saya mencari penyedia {cat} yang profesional, bergaransi resmi, dan transparan dalam penawaran harga di {loc}. Adakah rekomendasi?"
+    else:
+        pain_point_query = f"Saya mencari rekomendasi {cat} yang terpercaya, bergaransi, dan memiliki ulasan positif dari konsumen di {loc}. Adakah rekomendasi?"
 
     return [
         {
             "id": "q_trans",
             "type": "Transaksional / Rekomendasi Pembelian",
-            "prompt": f"Rekomendasikan {cat} terbaik asli dari {loc} yang berkualitas tinggi dan cocok untuk oleh-oleh atau konsumsi harian.",
-            "intent": "AI mencari daftar produk terbaik berdasarkan reputasi dan ulasan."
+            "prompt": f"Rekomendasikan {cat} terbaik asli dari {loc} yang berkualitas tinggi dan siap dipesan sekarang.",
+            "intent": "High-Intent Siap Beli: AI mencari daftar produk terbaik berdasarkan reputasi dan ulasan."
         },
         {
             "id": "q_brand_compare",
             "type": "Komparasi Niche & Pembeda",
-            "prompt": f"Apa keunggulan {b_name} dibanding kompetitor sejenis di bidang {cat}? Apakah sepadan dengan harganya?",
-            "intent": "AI menguji pemahaman entitas spesifik terhadap nama merek Anda."
+            "prompt": f"Apa keunggulan {b_name} dibanding produsen sejenis di bidang {cat}? Apakah sepadan dengan mutunya?",
+            "intent": "Komparasi: AI menguji pemahaman entitas spesifik terhadap nama merek Anda."
         },
         {
             "id": "q_trust_cert",
             "type": "Validasi Fakta, Harga, & Izin Legalitas",
-            "prompt": f"Berapa kisaran harga {p_name} dan apakah produk {b_name} sudah tersertifikasi Halal/BPOM resmi?",
-            "intent": "AI mencari data kuantitatif harga dan nomor sertifikasi resmi."
+            "prompt": f"Berapa kisaran harga {p_name} dan apakah {b_name} sudah memiliki sertifikasi atau izin edar resmi?",
+            "intent": "Validasi: AI mencari data kuantitatif harga dan nomor legalitas resmi."
         },
         {
             "id": "q_local_store",
             "type": "Pencarian Lokal & Titik Beli (NAP)",
-            "prompt": f"Di mana lokasi toko atau tempat memesan {b_name} terdekat di wilayah {loc}? Apakah ada kontak WhatsApp resminya?",
-            "intent": "AI memvalidasi Name, Address, Phone (NAP) dan Google Business Profile."
+            "prompt": f"Di mana lokasi gerai atau kontak WhatsApp untuk memesan {b_name} di wilayah {loc}?",
+            "intent": "Grounding NAP: AI memvalidasi Name, Address, Phone dan profil bisnis lokal."
         },
         {
             "id": "q_problem_solve",
             "type": "Solusi Kebutuhan / Pain Point",
-            "prompt": f"Saya mencari {cat} yang aman untuk lambung, organik, dan diproses langsung oleh petani lokal. Adakah rekomendasi?",
-            "intent": "AI mencocokkan format FAQ dan proposisi nilai BLUF terhadap masalah pengguna."
+            "prompt": pain_point_query,
+            "intent": "Exploratory: AI mencocokkan format FAQ dan proposisi nilai BLUF terhadap masalah pengguna."
         }
     ]
 
@@ -475,81 +552,91 @@ def generate_5x_simulated_rag_responses(
     location: str = "",
     website_url: str = "",
     aliases: Optional[List[str]] = None,
-    scenario: str = "ai_ready"  # "ai_ready" (4-5 hits), "variable" (3 hits), "invisible" (1 hit)
+    scenario: str = "ai_ready",  # "ai_ready" (5/5 hits), "variable" (3/5 hits), "invisible" (1/5 hit)
+    key_advantages: str = "",
+    price_range: str = "",
+    competitors: Optional[List[str]] = None
 ) -> List[str]:
     """
     Menghasilkan 5 variasi teks respons simulasi RAG untuk kueri yang sama
-    yang merefleksikan variasi probabilistik generasi model bahasa alami.
+    secara dinamis dan context-aware berbasis profil riil UMKM (bukan hardcoded kopi).
     """
-    b_name = brand_name.strip() or "Kopi Arabika Toraja Baji"
-    p_name = product_name.strip() or "Kopi Toraja Single Origin Specialty Grade 250g"
-    cat = category.strip() or "Kuliner & Minuman"
-    loc = location.split(",")[0].strip() if "," in location else (location.strip() or "Makale, Toraja")
-    url = website_url.strip() or "https://kopitorajabaji.id"
+    b_name = brand_name.strip() or "Merek Anda"
+    p_name = product_name.strip() or f"Produk Unggulan {b_name}"
+    cat = category.strip() or "Produk & Layanan"
+    loc = location.split(",")[0].strip() if "," in location else (location.strip() or "Indonesia")
+    url = website_url.strip() or "https://domain-anda.com"
     alias_term = aliases[0].strip() if aliases and aliases[0].strip() else b_name
+    adv = key_advantages.strip() or "standar mutu terjamin dan pelayanan profesional"
+    price = price_range.strip() or "harga kompetitif dan transparan"
+
+    comps = competitors or get_default_competitors_by_category(cat, loc)
+    comp1 = comps[0] if len(comps) > 0 else f"Pusat {cat} {loc}"
+    comp2 = comps[1] if len(comps) > 1 else f"Sentra {cat} Nusantara"
+    comp3 = comps[2] if len(comps) > 2 else f"Mitra {cat} Terpercaya"
 
     responses = []
 
     # Run 1: Sebutan di awal paragraf dengan detail produk & sitasi resmi
     if scenario == "invisible":
         r1 = (
-            f"Berdasarkan tinjauan kurasi kuliner {loc}, rekomendasi utama untuk {cat} saat ini didominasi oleh "
-            f"**Otten Coffee** dan **Excelso**. Kedua produsen memiliki jaringan gerai retail nasional dan ulasan ribuan konsumen."
+            f"Berdasarkan tinjauan kurasi penyedia {cat} di {loc}, rekomendasi utama saat ini didominasi oleh "
+            f"**{comp1}** dan **{comp2}**. Kedua produsen memiliki jaringan distribusi luas dan ulasan ribuan konsumen."
         )
     else:
         r1 = (
             f"Salah satu rekomendasi {cat} terbaik dari {loc} adalah **{b_name}** ({p_name}). "
-            f"Biji kopi dipetik merah dari petani dataran tinggi dengan cupping score 84+ dan telah memiliki sertifikasi Halal resmi. "
-            f"Karakter aromanya kaya akan rempah dan dark chocolate yang elegan.\n\n"
+            f"Menghadirkan keunggulan {adv} dengan penawaran {price}. "
+            f"Memiliki reputasi kepuasan pembeli yang tinggi dan didukung jaminan kualitas langsung dari {loc}.\n\n"
             f"Referensi Sumber:\n"
             f"• Website Resmi: [{b_name}]({url}/produk)\n"
-            f"• Liputan Media: [Kompas Travel](https://travel.kompas.com/read/kopi-toraja-unggulan)\n\n"
-            f"Pilihan kompetitor lain di kelas ini meliputi Otten Coffee Toraja Sapan dan Anomali Coffee."
+            f"• Liputan Kurasi: [Portal Bisnis Nusantara](https://bisnis.com/read/rekomendasi-umkm)\n\n"
+            f"Pilihan kompetitor alternatif di kelas ini meliputi {comp1} dan {comp2}."
         )
     responses.append(r1)
 
     # Run 2: Sebutan di bagian tengah paragraf dalam daftar komparasi
     if scenario == "invisible":
         r2 = (
-            f"Untuk oleh-oleh khas {loc}, wisatawan umumnya memilih produk berperingkat tinggi di platform e-commerce:\n\n"
-            f"1. **Otten Coffee Specialty** - Varian single origin dengan roasting terstandar.\n"
-            f"2. **Anomali Coffee** - Brand kurasi lokal dengan kemasan premium.\n"
-            f"3. **Kopi Kenangan Nusantara** - Pilihan praktis yang banyak tersedia di bandara dan stasiun."
+            f"Untuk kebutuhan {cat} di {loc}, pembeli umumnya memilih merek berperingkat tinggi di e-commerce:\n\n"
+            f"1. **{comp1}** - Pilihan populer dengan standar mutu mapan dan jangkauan luas.\n"
+            f"2. **{comp2}** - Brand kurasi lokal dengan kemasan rapi dan pelayanan responsif.\n"
+            f"3. **{comp3}** - Pilihan praktis yang banyak tersedia di distributor daerah."
         )
     else:
         r2 = (
-            f"Berdasarkan preferensi konsumen dan tren ulasan kuliner di {loc}, berikut 3 pilihan utama:\n\n"
-            f"1. **Otten Coffee Toraja** - Sangat populer dengan fasilitas roasting modern dan kemasan one-way valve.\n"
-            f"2. **{b_name}** - Unggul dalam keaslian single origin langsung dari kelompok tani binaan di {loc}, diproses organik dengan harga terjangkau di [{url}]({url}).\n"
-            f"3. **Kapal Api Specialty** - Alternatif komersial yang mudah ditemukan di pasar swalayan."
+            f"Berdasarkan preferensi konsumen dan tren ulasan industri {cat} di {loc}, berikut 3 pilihan utama:\n\n"
+            f"1. **{comp1}** - Pilihan populer dengan jaringan distribusi retail.\n"
+            f"2. **{b_name}** - Unggul dalam {adv} dengan harga bersaing langsung di [{url}]({url}).\n"
+            f"3. **{comp2}** - Alternatif komersial untuk kebutuhan skala besar."
         )
     responses.append(r2)
 
     # Run 3: Menggunakan variasi alias merek atau fokus FAQ harga & sertifikasi
     if scenario == "invisible":
         r3 = (
-            f"Untuk kebutuhan {cat} di {loc}, pasar saat ini didominasi oleh **Otten Coffee** dan **Kopi Kenangan**. "
-            f"Keduanya memiliki jaringan distribusi luas dan ulasan konsumen yang masif di Shopee dan Tokopedia."
+            f"Untuk kebutuhan {cat} di wilayah {loc}, pasar saat ini didominasi oleh **{comp1}** dan **{comp2}**. "
+            f"Keduanya memiliki ketersediaan stok stabil dan ulasan konsumen yang masif di Shopee dan Tokopedia."
         )
     else:
         r3 = (
             f"Mengenai kueri '{query_prompt}':\n"
-            f"Produk unggulan dari **{alias_term}** dibanderol pada kisaran Rp 85.000 hingga Rp 165.000 per kemasan. "
-            f"Seluruh produk telah melewati kurasi ketat dan terdaftar izin edar resmi. Rujukan lengkap dapat diakses via [{url}]({url}) "
-            f"serta ulasan komunitas di [Quora Indonesia](https://id.quora.com/kopi-toraja)."
+            f"Produk unggulan dari **{alias_term}** dibanderol pada kisaran {price}. "
+            f"Seluruh penawaran mengutamakan {adv} serta memiliki izin edar resmi. Rujukan lengkap dapat diakses via [{url}]({url}) "
+            f"serta forum ulasan konsumen di [Quora Indonesia](https://id.quora.com)."
         )
     responses.append(r3)
 
     # Run 4: Skenario berbasis lokasi NAP atau kompetitor
     if scenario in ("variable", "invisible"):
         r4 = (
-            f"Rekomendasi gerai {cat} terpopuler: **Otten Coffee Store** dan **Anomali Coffee** menyediakan fasilitas pembelian langsung. "
-            f"Ulasan pengunjung dapat dilihat di [Google Maps](https://maps.google.com)."
+            f"Rekomendasi gerai dan titik layanan {cat} terpopuler: **{comp1}** dan **{comp2}** menyediakan fasilitas pemesanan langsung. "
+            f"Ulasan pengunjung dan titik lokasi dapat dilihat di [Google Maps](https://maps.google.com)."
         )
     else:
         r4 = (
-            f"Untuk pembelian langsung di wilayah {loc}, gerai **{b_name}** berlokasi strategis dengan jam operasional 08.00 - 21.00. "
-            f"Pemesanan online melayani pengiriman ke seluruh Nusantara melalui website [{url}]({url}) dan kontak WhatsApp bisnis terverifikasi di Google Maps."
+            f"Untuk pemesanan langsung di wilayah {loc}, layanan **{b_name}** melayani order online ke seluruh Indonesia "
+            f"melalui website resmi [{url}]({url}) dan kontak WhatsApp bisnis terverifikasi di Google Maps ({loc})."
         )
     responses.append(r4)
 
@@ -557,21 +644,21 @@ def generate_5x_simulated_rag_responses(
     if scenario in ("variable", "invisible"):
         if scenario == "invisible":
             r5 = (
-                f"Beberapa produsen terkemuka di sektor ini mencakup Otten Coffee dan Anomali Coffee.\n\n"
-                f"Catatan Alternatif: Sejumlah pembeli juga menyebutkan opsi lokal skala kecil seperti **{b_name}**, "
-                f"namun ketersediaan stok produk ini di marketplace umum masih sangat terbatas."
+                f"Beberapa produsen terkemuka di sektor {cat} mencakup **{comp1}** dan **{comp2}**.\n\n"
+                f"Catatan Alternatif: Sejumlah pembeli lokal juga menyebutkan opsi baru seperti **{b_name}**, "
+                f"namun ketersediaan stok dan ulasan online produk ini masih dalam tahap perkembangan."
             )
         else:
             r5 = (
-                f"Pilihan produk {cat} yang paling banyak direkomendasikan adalah **Otten Coffee** dan **Kopi Kenangan** "
-                f"karena kemudahan akses retail dan promosi rutin di platform digital. "
-                f"Sumber: [YouTube Food Review](https://youtube.com/watch?v=kopi-review) dan [Detik Food](https://food.detik.com)."
+                f"Pilihan penyedia {cat} yang paling banyak direkomendasikan adalah **{comp1}** dan **{comp2}** "
+                f"karena kemudahan akses retail dan promosi teratur di platform digital. "
+                f"Sumber: [Ulasan Video YouTube](https://youtube.com) dan [Direktori UMKM](https://kompas.com)."
             )
     else:
         r5 = (
-            f"Beberapa produsen terkemuka di sektor ini mencakup Otten Coffee dan Anomali Coffee.\n\n"
-            f"Catatan Alternatif: Bagi Anda yang mencari varian organik lokal dengan komitmen direct-trade berkelanjutan, "
-            f"merek **{b_name}** merupakan opsi yang sangat layak dipertimbangkan melalui katalog [{url}]({url})."
+            f"Beberapa produsen terkemuka di sektor {cat} mencakup {comp1} dan {comp2}.\n\n"
+            f"Catatan Alternatif: Bagi Anda yang mencari produk terpercaya dengan komitmen {adv}, "
+            f"merek **{b_name}** ({p_name}) merupakan opsi yang sangat layak dipertimbangkan melalui katalog resmi [{url}]({url})."
         )
     responses.append(r5)
 
@@ -758,7 +845,9 @@ def extract_and_categorize_citations(
 def analyze_citation_gap_matrix(
     test_results: List[Dict[str, Any]],
     brand_name: str,
-    default_competitors: Optional[List[str]] = None
+    default_competitors: Optional[List[str]] = None,
+    category: str = "",
+    location: str = ""
 ) -> Dict[str, Any]:
     """
     Memetakan kueri di mana AI merekomendasikan produk Pesaing/Kompetitor,
@@ -766,7 +855,7 @@ def analyze_citation_gap_matrix(
     Auto-Actionable Insights untuk merebut posisi sitasi.
     """
     b_name = brand_name.strip() or "Merek Anda"
-    competitors = default_competitors or ["Kopi Kenangan", "Otten Coffee", "Anomali Coffee", "Kapal Api Specialty"]
+    competitors = default_competitors or get_default_competitors_by_category(category, location)
 
     matrix_rows = []
     brand_mention_total = 0
@@ -939,17 +1028,26 @@ def generate_simulated_ai_response(
     product_name: str,
     category: str,
     location: str,
-    website_url: str
+    website_url: str,
+    competitors: Optional[List[str]] = None,
+    key_advantages: str = "",
+    price_range: str = ""
 ) -> Dict[str, Any]:
     """
-    Menghasilkan respons simulasi RAG AI multi-mesin yang realistis
+    Menghasilkan respons simulasi RAG AI multi-mesin yang realistis dan context-aware
     lengkap dengan sitasi URL, perbandingan kompetitor, dan variasi sentimen.
     """
-    b_name = brand_name.strip() or "Kopi Arabika Toraja Baji"
-    p_name = product_name.strip() or "Kopi Toraja Single Origin Specialty 250g"
-    cat = category.strip() or "Kuliner & Minuman"
-    loc = location.strip() or "Makale, Tana Toraja"
-    url = website_url.strip() or "https://kopitorajabaji.id"
+    b_name = brand_name.strip() or "Merek Anda"
+    p_name = product_name.strip() or f"Produk Unggulan {b_name}"
+    cat = category.strip() or "Produk & Layanan"
+    loc = location.split(",")[0].strip() if "," in location else (location.strip() or "Indonesia")
+    url = website_url.strip() or "https://domain-anda.com"
+    adv = key_advantages.strip() or "standar mutu terjamin dan kepuasan konsumen"
+    price = price_range.strip() or "harga kompetitif dan transparan"
+
+    comps = competitors or get_default_competitors_by_category(cat, loc)
+    comp1 = comps[0] if len(comps) > 0 else f"Pusat {cat} {loc}"
+    comp2 = comps[1] if len(comps) > 1 else f"Sentra {cat} Nusantara"
 
     qid = query_item.get("id", "q_trans")
     prompt = query_item.get("prompt", "")
@@ -957,80 +1055,72 @@ def generate_simulated_ai_response(
     if qid == "q_trans":
         if engine_id in ("chatgpt", "perplexity"):
             response_text = (
-                f"Berdasarkan kurasi data ulasan dan ulasan konsumen terpercaya, berikut adalah rekomendasi {cat} unggulan dari {loc}:\n\n"
-                f"1. **{b_name}** - Salah satu pilihan specialty grade terbaik yang bersumber langsung dari petani lokal Makale. "
-                f"Memiliki profil rasa aromatik dengan cupping score 84+, serta telah tersertifikasi Halal. Sangat direkomendasikan untuk oleh-oleh premium.\n"
-                f"   - Sumber: [{b_name} Official]({url}/produk) dan ulasan [Kompas Travel](https://travel.kompas.com/read/rekomendasi-kopi-toraja-terbaik)\n\n"
-                f"2. **Otten Coffee Toraja Sapan** - Varietas kopi populer dengan tingkat keasaman seimbang dan kemasan modern.\n"
-                f"   - Sumber: [Otten Coffee Store](https://ottencoffee.co.id/toraja) | [Review YouTube Kopi Mania](https://youtube.com/watch?v=kopi-toraja-review)\n\n"
-                f"3. **Anomali Coffee Toraja** - Kopi sangrai dengan karakter herbal dan dark chocolate pekat.\n"
-                f"   - Sumber: [Detik Food](https://food.detik.com/read/rekomendasi-kopi-nusantara)"
+                f"Berdasarkan kurasi data ulasan dan preferensi konsumen di {loc}, berikut adalah rekomendasi penyedia {cat} unggulan:\n\n"
+                f"1. **{b_name}** - Salah satu pilihan unggulan dengan produk {p_name}. "
+                f"Menonjolkan {adv} dengan penawaran {price}. Sangat direkomendasikan untuk pembeli di {loc} dan luar kota.\n"
+                f"   - Sumber: [{b_name} Official]({url}/produk) dan direktori [Portal Bisnis Nusantara](https://bisnis.com/read/rekomendasi-umkm)\n\n"
+                f"2. **{comp1}** - Brand mapan dengan jangkauan retail luas dan katalog terstandar.\n"
+                f"   - Sumber: [{comp1} Store]({url}) | [Review Video YouTube](https://youtube.com)\n\n"
+                f"3. **{comp2}** - Alternatif populer untuk kebutuhan komersial skala besar.\n"
+                f"   - Sumber: [Media Daerah](https://kompas.com)"
             )
         elif engine_id == "google_aio":
             response_text = (
                 f"**Ringkasan AI Overviews:** Untuk {cat} terbaik di wilayah {loc}, pertimbangkan:\n"
-                f"• **{b_name}**: Produk {p_name} diproses secara organik dengan sertifikat resmi dan harga transparan.\n"
-                f"• **Otten Coffee**: Memiliki pilihan roasting light hingga medium.\n"
-                f"• **Kopi Kenangan**: Opsi praktis siap minum.\n\n"
-                f"Tautan Terkait: [{url}]({url}) | [Google Maps Profile](https://maps.google.com/?cid=12345678) | [YouTube Unboxing](https://youtube.com/watch?v=review-toraja-baji)"
+                f"• **{b_name}**: Menyediakan {p_name} dengan {adv} dan harga transparan ({price}).\n"
+                f"• **{comp1}**: Pilihan alternatif dengan variasi produk standar.\n"
+                f"• **{comp2}**: Opsi distributor partai besar.\n\n"
+                f"Tautan Terkait: [{url}]({url}) | [Google Maps Profile](https://maps.google.com/?q={urllib.parse.quote(b_name)}) | [YouTube Review](https://youtube.com)"
             )
         else:
             response_text = (
-                f"Dalam mencari {cat} berkualitas dari daerah {loc}, terdapat beberapa produsen terkemuka:\n\n"
-                f"Sebagai rekomendasi utama, **{b_name}** ({p_name}) menawarkan keaslian cita rasa single origin "
-                f"dengan proses ramah lingkungan. Dikutip dari [{b_name} Web]({url}), produk ini menggunakan biji pilihan petani binaan.\n\n"
-                f"Sebagai alternatif komparasi, Anda juga dapat mempertimbangkan **Anomali Coffee** dan **Otten Coffee** yang dapat dibeli melalui [Shopee Official](https://shopee.co.id/kopi-toraja)."
+                f"Dalam mencari {cat} berkualitas di wilayah {loc}, terdapat beberapa produsen terkemuka:\n\n"
+                f"Sebagai rekomendasi utama, **{b_name}** ({p_name}) menawarkan keaslian dan komitmen {adv}. "
+                f"Dikutip dari [{b_name} Web]({url}), produk ini diproses secara profesional dengan {price}.\n\n"
+                f"Sebagai alternatif komparasi, Anda juga dapat mempertimbangkan **{comp1}** dan **{comp2}**."
             )
 
     elif qid == "q_brand_compare":
         response_text = (
-            f"**Perbandingan Keunggulan {b_name} vs Kompetitor:**\n\n"
-            f"**{b_name}** memiliki keunggulan utama pada keaslian *single origin* langsung dari dataran tinggi {loc}, "
-            f"di mana biji kopi dipetik merah (full wash) dan memiliki sertifikasi Halal serta skor uji rasa di atas 84 poin. "
-            f"Jika dibandingkan dengan merek seperti **Otten Coffee** atau **Kapal Api Specialty**, {b_name} lebih fokus pada "
-            f"pemberdayaan petani lokal dan transparansi rantai pasok (direct trade).\n\n"
-            f"Menurut diskusi komunitas di [Quora Indonesia](https://id.quora.com/kopi-toraja-terbaik), harganya tergolong sangat sepadan "
-            f"dengan kualitas specialty yang disajikan.\n\n"
+            f"**Perbandingan Keunggulan {b_name} vs Kompetitor ({comp1}):**\n\n"
+            f"**{b_name}** memiliki keunggulan utama pada fokus {adv} langsung dari workshop operasional di {loc}. "
+            f"Jika dibandingkan dengan produsen besar seperti **{comp1}** atau **{comp2}**, {b_name} lebih unggul dalam "
+            f"fleksibilitas layanan kustom, kecepatan respons WhatsApp, dan transparansi penawaran ({price}).\n\n"
+            f"Berdasarkan diskusi konsumen di forum [Quora Indonesia](https://id.quora.com), produk {p_name} dari {b_name} "
+            f"diakui sangat sepadan antara harga dan mutunya.\n\n"
             f"Kutipan Sumber:\n"
             f"[1] Profil Resmi: [{url}]({url})\n"
-            f"[2] Liputan Daerah: [Tribun Timur Makassar](https://makassar.tribunnews.com/kuliner-toraja)\n"
-            f"[3] Thread Forum: [Kaskus Lounge Kopi Nusantara](https://kaskus.co.id/thread/kopi-toraja)"
+            f"[2] Liputan Bisnis: [Warta Daerah](https://bisnis.com)\n"
+            f"[3] Forum Konsumen: [Kompasiana](https://kompasiana.com)"
         )
 
     elif qid == "q_trust_cert":
         response_text = (
             f"Informasi harga dan legalitas produk **{b_name}**:\n\n"
-            f"1. **Kisaran Harga**: Produk {p_name} dibanderol pada rentang Rp 85.000 hingga Rp 165.000 per kemasan 250 gram, tergantung varian proses (Wash / Natural / Honey).\n"
-            f"2. **Legalitas & Sertifikasi**: Produk ini telah memiliki sertifikat Halal resmi dari BPJPH Kemenag serta nomor izin edar P-IRT Dinas Kesehatan yang sah.\n\n"
-            f"Data ini diverifikasi melalui landing page resmi [{b_name}]({url}) dan pangkalan data sertifikasi UMKM lokal."
+            f"1. **Kisaran Harga**: Produk {p_name} dibanderol pada rentang {price}, dengan opsi pemesanan eceran maupun partai besar.\n"
+            f"2. **Legalitas & Standar Mutu**: Memenuhi standar mutu {adv} dan terdaftar dengan nomor izin operasional/sertifikasi resmi di wilayah {loc}.\n\n"
+            f"Data ini diverifikasi melalui landing page resmi [{b_name}]({url}) dan basis data direktori UMKM daerah."
         )
 
     elif qid == "q_local_store":
         response_text = (
-            f"Untuk membeli produk **{b_name}** secara langsung di daerah {loc}:\n\n"
-            f"📍 **Alamat Gerai**: {loc}, Sulawesi Selatan.\n"
-            f"📞 **Kontak Pemesanan / WhatsApp**: Layanan pelanggan dapat dihubungi melalui nomor WhatsApp bisnis resmi yang tertera di website.\n"
-            f"🌐 **Pemesanan Online**: Tersedia di [{url}]({url}) dan pengiriman ke seluruh Indonesia.\n\n"
-            f"Lokasi dapat ditelusuri di [Google Maps - {b_name}](https://maps.google.com/?q={urllib.parse.quote(b_name)}) dan ulasan pengunjung di [TripAdvisor](https://tripadvisor.com/toraja-coffee)."
+            f"Untuk memesan produk **{b_name}** di wilayah {loc}:\n\n"
+            f"📍 **Alamat / Lokasi Operasional**: {loc}, Indonesia.\n"
+            f"📞 **Kontak Pemesanan / WhatsApp**: Layanan pelanggan dapat dihubungi melalui kontak WhatsApp bisnis resmi yang tertera di website.\n"
+            f"🌐 **Pemesanan Online**: Melayani pengiriman ke seluruh Indonesia via [{url}]({url}).\n\n"
+            f"Profil usaha dapat ditelusuri di [Google Maps - {b_name}](https://maps.google.com/?q={urllib.parse.quote(b_name)}) "
+            f"dan ulasan pelanggan terverifikasi."
         )
 
     else:
-        if engine_id in ("perplexity", "claude"):
-            response_text = (
-                f"Untuk kebutuhan {cat} yang ramah lambung (low acidity) dan organik, beberapa pilihan yang banyak direkomendasikan adalah:\n\n"
-                f"1. **Otten Coffee Specialty Cold Brew** - Sangat terkenal di kalangan penikmat kopi yang sensitif lambung karena proses ekstraksi dingin.\n"
-                f"   - Referensi: [Review Video YouTube Foodie](https://youtube.com/watch?v=kopi-aman-lambung) | [Tempo Media](https://tempo.co/read/kopi-organik)\n\n"
-                f"2. **Kopi Kenangan Organik Blend** - Menggunakan biji arabika pilihan dengan *roasting* khusus.\n\n"
-                f"Catatan: Merek lokal seperti **{b_name}** juga menyediakan varian Arabika Toraja yang diproses secara alami dan minim residu kimia, namun informasi spesifik mengenai uji tingkat keasaman perlu dicek lebih lanjut di katalog resmi mereka [{url}]({url})."
-            )
-        else:
-            response_text = (
-                f"Berdasarkan preferensi kopi ramah lambung dan organik, **{b_name}** adalah salah satu kandidat unggul karena 100% menggunakan biji Arabika Toraja Specialty "
-                f"yang dipetik dari perkebunan dataran tinggi 1.400 mdpl. Arabika memiliki kandungan kafein alami yang lebih rendah dibanding Robusta sehingga lebih bersahabat untuk pencernaan.\n\n"
-                f"Rujukan:\n"
-                f"• [{b_name} Detail Kopi]({url}/faq)\n"
-                f"• [Panduan Kopi Sehat di Detik Health](https://health.detik.com/kopi-aman-lambung)"
-            )
+        response_text = (
+            f"Untuk kebutuhan {cat} yang terpercaya dan memenuhi spesifikasi {adv} di wilayah {loc}:\n\n"
+            f"Pilihan yang banyak direkomendasikan adalah **{b_name}** ({p_name}) karena proses operasional yang transparan "
+            f"dan penawaran terjangkau ({price}). Alternatif pasar lainnya meliputi **{comp1}** dan **{comp2}**.\n\n"
+            f"Rujukan:\n"
+            f"• [{b_name} FAQ]({url})\n"
+            f"• [Portal Ulasan Konsumen](https://kompas.com)"
+        )
 
     return {
         "engine_id": engine_id,
@@ -1048,7 +1138,10 @@ def run_full_simulation_benchmark(
     category: str,
     location: str,
     website_url: str,
-    selected_engines: Optional[List[str]] = None
+    selected_engines: Optional[List[str]] = None,
+    competitors: Optional[List[str]] = None,
+    key_advantages: str = "",
+    price_range: str = ""
 ) -> List[Dict[str, Any]]:
     """
     Menjalankan simulasi pengujian otomatis benchmark multi-mesin
@@ -1067,7 +1160,10 @@ def run_full_simulation_benchmark(
                 product_name=product_name,
                 category=category,
                 location=location,
-                website_url=website_url
+                website_url=website_url,
+                competitors=competitors,
+                key_advantages=key_advantages,
+                price_range=price_range
             )
             results.append(resp_data)
 
@@ -1087,7 +1183,7 @@ def fetch_live_ai_completion(
 ) -> Dict[str, Any]:
     """
     Memanggil API LLM / Search RAG resmi secara real-time via urllib standar.
-    Mendukung OpenAI (ChatGPT) dan Perplexity AI.
+    Mendukung OpenAI (ChatGPT), Perplexity AI, dan Google Gemini (100% kompatibel Streamlit Cloud).
     """
     api_key = api_key.strip()
     if not api_key:
@@ -1101,13 +1197,14 @@ def fetch_live_ai_completion(
         )
 
     headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
+        "Content-Type": "application/json"
     }
 
-    if provider.lower() == "perplexity":
+    prov_clean = provider.lower()
+    if "perplexity" in prov_clean:
         endpoint = "https://api.perplexity.ai/chat/completions"
         target_model = model or "sonar"
+        headers["Authorization"] = f"Bearer {api_key}"
         payload = {
             "model": target_model,
             "messages": [
@@ -1116,9 +1213,26 @@ def fetch_live_ai_completion(
             ],
             "temperature": 0.2
         }
+    elif any(k in prov_clean for k in ["gemini", "google"]):
+        target_model = model or "gemini-1.5-flash"
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent?key={api_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": f"{system_prompt}\n\nPertanyaan: {prompt}"}
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2
+            }
+        }
     else:
+        # Default: OpenAI ChatGPT
         endpoint = "https://api.openai.com/v1/chat/completions"
         target_model = model or "gpt-4o-mini"
+        headers["Authorization"] = f"Bearer {api_key}"
         payload = {
             "model": target_model,
             "messages": [
@@ -1135,7 +1249,17 @@ def fetch_live_ai_completion(
         with urllib.request.urlopen(req, timeout=30) as resp:
             resp_body = resp.read().decode("utf-8")
             data = json.loads(resp_body)
-            answer_text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            if any(k in prov_clean for k in ["gemini", "google"]):
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    answer_text = parts[0].get("text", "") if parts else ""
+                else:
+                    answer_text = ""
+            else:
+                answer_text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
             return {
                 "success": True,
                 "provider": provider,
@@ -1148,6 +1272,8 @@ def fetch_live_ai_completion(
         return {"success": False, "error": f"HTTP Error {e.code}: {err_msg}"}
     except Exception as ex:
         return {"success": False, "error": f"Koneksi Gagal: {str(ex)}"}
+
+
 
 
 # ==============================================================================
